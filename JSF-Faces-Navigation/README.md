@@ -1,61 +1,87 @@
-# JSF EL Navigation 1.3.0
+# JSF EL Navigation 1.4.0
 
-Eclipse WTP plug-in for fast Ctrl+Click navigation from JSF/Facelets EL to Java.
+Eclipse WTP plug-in for fast Ctrl+Click navigation between JSF/Facelets XHTML,
+Java controllers and JavaScript.
 
-## Performance design
+## 1.4.0
 
-Version 1.3.0 uses two cache layers:
+### Richer EL navigation
 
-- **Persistent bean index on disk** in the Eclipse plug-in state area.
-- **In-memory JDT member/type caches** for getters, fields, methods, type
-  hierarchies and return types.
+The detector no longer requires the whole EL expression to be a simple
+`bean.property` chain. It resolves the chain under the cursor inside expressions
+such as:
 
-The persistent index stores only lightweight identifiers (bean name, project,
-qualified Java type, workspace resource path and source modification stamp).
-It does not serialize JDT objects.
-
-Java source changes are handled incrementally through Eclipse resource deltas:
-only changed/added/removed `.java` compilation units are re-indexed.
-
-If a source file changed while Eclipse was closed, the persisted modification
-stamp makes the old entry stale. It is discarded and resolved/rebuilt rather
-than trusted.
-
-Explicit bean names such as:
-
-```java
-@ManagedBean(name = "foo")
-public class CompletelyDifferentController { ... }
+```xhtml
+#{!aumiAntragDetail.bescheidButtonVisible or aumiAntragDetail.modusLesen}
+#{aumiAntragDetail.save()}
 ```
 
-cannot be derived from `foo`. On the first unresolved lookup in a session the
-plug-in performs one background full-source index build. The resulting index
-is persisted, so normal future Eclipse sessions use the disk cache directly.
+Operators, negation, comparisons and method parentheses no longer disable the
+hyperlink detector.
 
-Navigation lookup itself is executed in an Eclipse background `Job`, so even a
-cold rebuild does not block the UI thread.
+### XHTML JavaScript navigation
+
+Ctrl+Click JavaScript calls in an XHTML file, for example:
+
+```xhtml
+oncomplete="preventBVsDeletion(); triggerDL(args);"
+```
+
+The current unsaved XHTML document is searched first. If the definition is not
+in the current document, the persistent project/workspace web index is queried.
+Supported definition styles include:
+
+```javascript
+function triggerDL(args) { }
+const triggerDL = function(args) { };
+const triggerDL = (args) => { };
+```
+
+### Java / PrimeFaces -> JavaScript
+
+A second hyperlink detector is registered for the JDT Java editor target
+`org.eclipse.jdt.ui.javaCode`.
+
+Calls inside common PrimeFaces/RequestContext script execution strings can be
+Ctrl+Clicked, for example:
+
+```java
+PrimeFaces.current().executeScript("refreshHistorieTab()");
+RequestContext.getCurrent().execute("refreshHistorieTab()");
+```
+
+If one JavaScript definition is found it is opened. If several are found, a
+selection dialog shows the candidate XHTML/JS files. If no JavaScript definition
+is found and the Java class is a `@ManagedBean`/`@Named` controller, the plug-in
+shows XHTML pages that reference that controller.
+
+## Persistent indexes
+
+The plug-in keeps two persistent indexes in Eclipse's plug-in state directory:
+
+- `bean-index-v1.bin`: EL bean name -> Java type
+- `web-index-v1.bin`: JavaScript definitions and XHTML controller usages
+
+They normally live below:
+
+`.metadata/.plugins/de.andre.jsfnavigation/`
+
+Both indexes are updated incrementally while Eclipse is running. Changed Java
+files update the bean index; changed `.xhtml`/`.js` files update only their web
+index entries. Stored modification stamps prevent stale file entries from being
+blindly trusted after an Eclipse restart.
+
+JDT member/type-hierarchy/return-type caches remain in memory because recreating
+those handles from JDT is cheap and safer than serializing JDT objects.
 
 ## WTP editor target
 
-The hyperlink detector is registered once for:
+XHTML detector:
 
 `org.eclipse.wst.html.core.htmlsource`
 
-There is intentionally no duplicate Default Text Editor registration.
+Java detector:
 
-## Supported common expressions
+`org.eclipse.jdt.ui.javaCode`
 
-```xhtml
-#{userConverter}
-#{aumiAntragDetail.completeUser}
-#{aumiAntragDetail.antrag.currentRevision.bezirk}
-```
-
-## Current scope
-
-This version resolves `@ManagedBean`, CDI `@Named`, explicit bean names,
-JavaBean getters, inherited members, fields, direct action/listener-style
-methods, and ordinary chained property return types.
-
-Dynamic EL resolvers, CDI producer methods/fields, collection indexing and
-arbitrary method-call expressions are outside the current resolver.
+The old duplicate Default Text Editor registration remains removed.

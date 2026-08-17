@@ -13,43 +13,37 @@ public final class EditorContext {
     private EditorContext() {
     }
 
-    public static String currentProjectName() {
+    public static IFile currentFile() {
         try {
-            IWorkbenchWindow window =
-                    PlatformUI.getWorkbench()
-                            .getActiveWorkbenchWindow();
-
+            IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
             if (window == null) {
                 return null;
             }
 
             IWorkbenchPage page = window.getActivePage();
-
             if (page == null) {
                 return null;
             }
 
             IEditorPart editor = page.getActiveEditor();
-
             if (editor == null) {
                 return null;
             }
 
             IEditorInput input = editor.getEditorInput();
-
             if (!(input instanceof IFileEditorInput)) {
                 return null;
             }
 
-            IFile file =
-                    ((IFileEditorInput) input).getFile();
-
-            return file == null
-                    ? null
-                    : file.getProject().getName();
+            return ((IFileEditorInput) input).getFile();
 
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    public static String currentProjectName() {
+        IFile file = currentFile();
+        return file == null ? null : file.getProject().getName();
     }
 }

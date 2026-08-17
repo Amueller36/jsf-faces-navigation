@@ -6,30 +6,19 @@ import java.util.List;
 
 public final class ELExpression {
 
-    private final String expression;
     private final List<String> parts;
-    private final int expressionStart;
+    private final List<Integer> partOffsets;
 
-    public ELExpression(
-            String expression,
-            List<String> parts,
-            int expressionStart) {
-
-        this.expression = expression;
-        this.parts = Collections.unmodifiableList(
-                new ArrayList<String>(parts));
-        this.expressionStart = expressionStart;
-    }
-
-    public String getExpression() {
-        return expression;
+    public ELExpression(List<String> parts, List<Integer> partOffsets) {
+        this.parts = Collections.unmodifiableList(new ArrayList<String>(parts));
+        this.partOffsets = Collections.unmodifiableList(new ArrayList<Integer>(partOffsets));
     }
 
     public List<String> getParts() {
         return parts;
     }
 
-    public int getExpressionStart() {
-        return expressionStart;
+    public int getPartOffset(int index) {
+        return partOffsets.get(index).intValue();
     }
 }

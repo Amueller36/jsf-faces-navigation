@@ -10,31 +10,18 @@ public final class ELSelectionResolver {
             ELExpression expression,
             String preferredProjectName) {
 
-        int currentOffset =
-                expression.getExpressionStart() + 2;
+        for (int i = 0; i < expression.getParts().size(); i++) {
+            String part = expression.getParts().get(i);
+            int start = expression.getPartOffset(i);
+            int endExclusive = start + part.length();
 
-        for (int i = 0;
-                i < expression.getParts().size();
-                i++) {
-
-            String part =
-                    expression.getParts().get(i);
-
-            int start = currentOffset;
-            int endExclusive =
-                    start + part.length();
-
-            if (cursorOffset >= start
-                    && cursorOffset < endExclusive) {
-
+            if (cursorOffset >= start && cursorOffset < endExclusive) {
                 return new ELSelection(
                         expression,
                         i,
                         part,
                         preferredProjectName);
             }
-
-            currentOffset = endExclusive + 1;
         }
 
         return null;

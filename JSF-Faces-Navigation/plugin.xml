@@ -1,13 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?eclipse version="3.4"?>
 <plugin>
-  <extension point="org.eclipse.ui.workbench.texteditor.hyperlinkDetectors">
-    <hyperlinkDetector
-        activate="true"
-        class="de.andre.jsfnavigation.ELHyperlinkDetector"
-        id="de.andre.jsfnavigation.elHyperlinkDetector.wtpHtml"
-        name="JSF EL Navigation"
-        targetId="org.eclipse.wst.html.core.htmlsource">
-    </hyperlinkDetector>
-  </extension>
+   <extension
+         point="org.eclipse.ui.workbench.texteditor.hyperlinkDetectors">
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.ELHyperlinkDetector"
+            id="de.andre.jsfnavigation.elHyperlinkDetector.wtpHtml"
+            name="JSF EL / JavaScript Navigation"
+            targetId="org.eclipse.wst.html.core.htmlsource">
+      </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.JavaExecuteScriptHyperlinkDetector"
+            id="de.andre.jsfnavigation.executeScriptHyperlinkDetector.java"
+            name="PrimeFaces JavaScript Navigation"
+            targetId="org.eclipse.jdt.ui.javaCode">
+      </hyperlinkDetector>
+   </extension>
 </plugin>

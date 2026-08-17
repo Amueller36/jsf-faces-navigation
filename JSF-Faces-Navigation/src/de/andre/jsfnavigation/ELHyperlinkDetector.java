@@ -7,8 +7,7 @@ import org.eclipse.jface.text.Region;
 import org.eclipse.jface.text.hyperlink.IHyperlink;
 import org.eclipse.jface.text.hyperlink.IHyperlinkDetector;
 
-public final class ELHyperlinkDetector
-        implements IHyperlinkDetector {
+public final class ELHyperlinkDetector implements IHyperlinkDetector {
 
     @Override
     public IHyperlink[] detectHyperlinks(
@@ -16,64 +15,40 @@ public final class ELHyperlinkDetector
             IRegion region,
             boolean canShowMultipleHyperlinks) {
 
-        IDocument document =
-                textViewer.getDocument();
-
+        IDocument document = textViewer.getDocument();
         int offset = region.getOffset();
 
-        ELExpression expression =
-                ELExpressionParser.find(
-                        document,
-                        offset);
+        ELExpression expression = ELExpressionParser.find(document, offset);
 
-        if (expression == null) {
-            return null;
+        if (expression != null) {
+            ELSelection selection = ELSelectionResolver.resolve(
+                    offset,
+                    expression,
+                    EditorContext.currentProjectName());
+
+            if (selection != null) {
+                IRegion hyperlinkRegion = new Region(
+                        expression.getPartOffset(selection.getPartIndex()),
+                        selection.getSelectedPart().length());
+
+                return new IHyperlink[] {
+                        new ELHyperlink(hyperlinkRegion, selection)
+                };
+            }
         }
 
-        String projectName =
-                EditorContext.currentProjectName();
+        JavaScriptCall call = JavaScriptCallDetector.find(document, offset);
 
-        ELSelection selection =
-                ELSelectionResolver.resolve(
-                        offset,
-                        expression,
-                        projectName);
-
-        if (selection == null) {
-            return null;
+        if (call != null) {
+            return new IHyperlink[] {
+                    new JavaScriptHyperlink(
+                            new Region(call.getOffset(), call.getName().length()),
+                            call,
+                            document,
+                            EditorContext.currentFile())
+            };
         }
 
-        int partStart =
-                findPartOffset(
-                        expression,
-                        selection.getPartIndex());
-
-        IRegion hyperlinkRegion =
-                new Region(
-                        partStart,
-                        selection.getSelectedPart()
-                                .length());
-
-        return new IHyperlink[] {
-                new ELHyperlink(
-                        hyperlinkRegion,
-                        selection)
-        };
-    }
-
-    private int findPartOffset(
-            ELExpression expression,
-            int partIndex) {
-
-        int offset =
-                expression.getExpressionStart() + 2;
-
-        for (int i = 0; i < partIndex; i++) {
-            offset += expression.getParts()
-                    .get(i)
-                    .length() + 1;
-        }
-
-        return offset;
+        return null;
     }
 }

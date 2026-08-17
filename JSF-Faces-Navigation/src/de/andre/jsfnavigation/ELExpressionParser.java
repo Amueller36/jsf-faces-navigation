@@ -2,29 +2,37 @@ package de.andre.jsfnavigation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.jface.text.IDocument;
 
 public final class ELExpressionParser {
 
+    private static final String IDENT = "[A-Za-z_$][A-Za-z0-9_$]*";
+
+    /*
+     * Matches chains inside a larger EL expression without requiring the whole
+     * expression to be a simple property chain. This means operators such as
+     * !, and/or, method parentheses and comparisons no longer disable Ctrl+Click.
+     * A simple bracket/index section between properties is tolerated too.
+     */
+    private static final Pattern CHAIN = Pattern.compile(
+            IDENT
+            + "(?:\\s*\\[[^\\]]*\\])?"
+            + "(?:\\s*\\.\\s*" + IDENT
+            + "(?:\\s*\\[[^\\]]*\\])?)*");
+
+    private static final Pattern CHAIN_PART = Pattern.compile(
+            "(?:^|\\.)\\s*(" + IDENT + ")");
+
     private ELExpressionParser() {
     }
 
-    public static ELExpression find(
-            IDocument document,
-            int cursorOffset) {
-
+    public static ELExpression find(IDocument document, int cursorOffset) {
         try {
             String text = document.get();
-
-            int hashStart =
-                    text.lastIndexOf("#{", cursorOffset);
-
-            int dollarStart =
-                    text.lastIndexOf("${", cursorOffset);
-
-            int start =
-                    Math.max(hashStart, dollarStart);
+            int start = enclosingExpressionStart(text, cursorOffset);
 
             if (start < 0) {
                 return null;
@@ -36,97 +44,67 @@ public final class ELExpressionParser {
                 return null;
             }
 
-            String rawBody =
-                    text.substring(start + 2, end);
+            int bodyStart = start + 2;
+            String body = text.substring(bodyStart, end);
+            int relativeCursor = cursorOffset - bodyStart;
 
-            int leadingWhitespace = 0;
+            Matcher chainMatcher = CHAIN.matcher(body);
 
-            while (leadingWhitespace < rawBody.length()
-                    && Character.isWhitespace(
-                            rawBody.charAt(
-                                    leadingWhitespace))) {
+            while (chainMatcher.find()) {
+                if (relativeCursor < chainMatcher.start()
+                        || relativeCursor >= chainMatcher.end()) {
+                    continue;
+                }
 
-                leadingWhitespace++;
+                String chain = chainMatcher.group();
+                int chainAbsoluteStart = bodyStart + chainMatcher.start();
+                Matcher partMatcher = CHAIN_PART.matcher(chain);
+
+                List<String> parts = new ArrayList<String>();
+                List<Integer> offsets = new ArrayList<Integer>();
+
+                while (partMatcher.find()) {
+                    String part = partMatcher.group(1);
+                    int offset = chainAbsoluteStart + partMatcher.start(1);
+                    parts.add(part);
+                    offsets.add(Integer.valueOf(offset));
+                }
+
+                if (parts.isEmpty() || isELKeyword(parts.get(0))) {
+                    return null;
+                }
+
+                return new ELExpression(parts, offsets);
             }
 
-            String body =
-                    rawBody.substring(
-                            leadingWhitespace)
-                            .trim();
-
-            if (body.isEmpty()) {
-                return null;
-            }
-
-            List<String> parts =
-                    splitSimplePropertyChain(body);
-
-            if (parts.isEmpty()) {
-                return null;
-            }
-
-            /*
-             * expressionStart remains the offset of '#{'/'${', adjusted
-             * backwards so that "+ 2" in the selection code lands on the
-             * first identifier even when the expression begins with spaces.
-             */
-            return new ELExpression(
-                    body,
-                    parts,
-                    start + leadingWhitespace);
+            return null;
 
         } catch (RuntimeException e) {
             return null;
         }
     }
 
-    private static List<String> splitSimplePropertyChain(
-            String body) {
-
-        List<String> result =
-                new ArrayList<String>();
-
-        int start = 0;
-
-        for (int i = 0; i <= body.length(); i++) {
-            if (i == body.length()
-                    || body.charAt(i) == '.') {
-
-                String part =
-                        body.substring(start, i)
-                                .trim();
-
-                if (!isIdentifier(part)) {
-                    return new ArrayList<String>();
-                }
-
-                result.add(part);
-                start = i + 1;
-            }
-        }
-
-        return result;
+    private static boolean isELKeyword(String value) {
+        return "and".equals(value) || "or".equals(value)
+                || "not".equals(value) || "empty".equals(value)
+                || "true".equals(value) || "false".equals(value)
+                || "null".equals(value) || "eq".equals(value)
+                || "ne".equals(value) || "lt".equals(value)
+                || "gt".equals(value) || "le".equals(value)
+                || "ge".equals(value) || "div".equals(value)
+                || "mod".equals(value);
     }
 
-    private static boolean isIdentifier(String value) {
-        if (value == null || value.isEmpty()) {
-            return false;
+    private static int enclosingExpressionStart(String text, int cursorOffset) {
+        int hashStart = text.lastIndexOf("#{", cursorOffset);
+        int dollarStart = text.lastIndexOf("${", cursorOffset);
+        int start = Math.max(hashStart, dollarStart);
+
+        if (start < 0) {
+            return -1;
         }
 
-        if (!Character.isJavaIdentifierStart(
-                value.charAt(0))) {
-
-            return false;
-        }
-
-        for (int i = 1; i < value.length(); i++) {
-            if (!Character.isJavaIdentifierPart(
-                    value.charAt(i))) {
-
-                return false;
-            }
-        }
-
-        return true;
+        int previousClose = text.lastIndexOf('}', cursorOffset);
+        return previousClose > start ? -1 : start;
     }
 }
