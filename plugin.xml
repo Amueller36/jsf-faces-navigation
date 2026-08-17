@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <!--
+      Eclipse WTP HTML / XHTML editor.
+      The user's active editor is StructuredTextEditor with editor id:
+      org.eclipse.wst.html.core.htmlsource.source
+
+      WTP's hyperlink target for HTML source is:
+      org.eclipse.wst.html.core.htmlsource
+   -->
+   <extension
+         point="org.eclipse.ui.workbench.texteditor.hyperlinkDetectors">
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.ELHyperlinkDetector"
+            id="de.andre.jsfnavigation.elHyperlinkDetector.wtpHtml"
+            name="JSF EL Navigation"
+            targetId="org.eclipse.wst.html.core.htmlsource">
+      </hyperlinkDetector>
+
+      <!-- Fallback for Open With -> Text Editor -->
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.ELHyperlinkDetector"
+            id="de.andre.jsfnavigation.elHyperlinkDetector.defaultText"
+            name="JSF EL Navigation"
+            targetId="org.eclipse.ui.DefaultTextEditor">
+      </hyperlinkDetector>
+   </extension>
+</plugin>
