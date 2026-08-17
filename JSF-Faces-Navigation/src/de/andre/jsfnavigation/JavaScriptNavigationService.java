@@ -45,6 +45,32 @@ public final class JavaScriptNavigationService {
         navigateFunctionInBackground(functionName, projectName, controllerBeanName);
     }
 
+    private static List<JavaScriptDefinition> filterDefinitionsToBeanPages(
+            List<JavaScriptDefinition> definitions,
+            List<BeanUsage> pages) {
+
+        java.util.Set<String> paths = new java.util.HashSet<String>();
+
+        if (pages != null) {
+            for (BeanUsage usage : pages) {
+                paths.add(usage.getResourcePath());
+            }
+        }
+
+        java.util.List<JavaScriptDefinition> filtered =
+                new java.util.ArrayList<JavaScriptDefinition>();
+
+        if (definitions != null) {
+            for (JavaScriptDefinition definition : definitions) {
+                if (paths.contains(definition.getResourcePath())) {
+                    filtered.add(definition);
+                }
+            }
+        }
+
+        return filtered;
+    }
+
     private static void navigateFunctionInBackground(
             final String functionName,
             final String projectName,
@@ -61,6 +87,24 @@ public final class JavaScriptNavigationService {
                 List<JavaScriptDefinition> definitions =
                         index.findFunctions(functionName, projectName);
 
+                List<BeanUsage> pages = null;
+
+                if (controllerBeanName != null && !controllerBeanName.isEmpty()) {
+                    pages = index.findBeanUsages(controllerBeanName, projectName);
+
+                    /*
+                     * Prefer JavaScript definitions in XHTML files that actually
+                     * reference the current controller bean. This avoids showing
+                     * identically named helper functions from unrelated screens.
+                     */
+                    List<JavaScriptDefinition> controllerDefinitions =
+                            filterDefinitionsToBeanPages(definitions, pages);
+
+                    if (!controllerDefinitions.isEmpty()) {
+                        definitions = controllerDefinitions;
+                    }
+                }
+
                 JavaScriptDefinition selected =
                         NavigationChooser.chooseFunction(functionName, definitions);
 
@@ -69,8 +113,7 @@ public final class JavaScriptNavigationService {
                     return Status.OK_STATUS;
                 }
 
-                if (controllerBeanName != null && !controllerBeanName.isEmpty()) {
-                    List<BeanUsage> pages = index.findBeanUsages(controllerBeanName, projectName);
+                if (pages != null && !pages.isEmpty()) {
                     BeanUsage page = NavigationChooser.choosePage(controllerBeanName, pages);
                     if (page != null) {
                         WebEditorOpener.open(page.getFile(), page.getOffset());

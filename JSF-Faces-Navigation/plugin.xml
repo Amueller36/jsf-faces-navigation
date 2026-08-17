@@ -17,5 +17,243 @@
             name="PrimeFaces JavaScript Navigation"
             targetId="org.eclipse.jdt.ui.javaCode">
       </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.JpaQueryHyperlinkDetector"
+            id="de.andre.jsfnavigation.jpaQueryHyperlinkDetector.java"
+            name="JPA / JPQL Navigation"
+            targetId="org.eclipse.jdt.ui.javaCode">
+      </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.JsfSmartHyperlinkDetector"
+            id="de.andre.jsfnavigation.jsfSmartHyperlinkDetector.wtpHtml"
+            name="PrimeFaces / RichFaces / Facelets Navigation"
+            targetId="org.eclipse.wst.html.core.htmlsource">
+      </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.JavaJsfStringHyperlinkDetector"
+            id="de.andre.jsfnavigation.javaJsfStringHyperlinkDetector.java"
+            name="PrimeFaces / RichFaces / JSF String Navigation"
+            targetId="org.eclipse.jdt.ui.javaCode">
+      </hyperlinkDetector>
    </extension>
+
+   <extension
+         point="org.eclipse.jdt.ui.javaEditorTextHovers">
+      <hover
+            activate="true"
+            class="de.andre.jsfnavigation.JpaQueryHover"
+            description="Shows Java type, JPA annotations, database mapping and source comment for JPQL properties."
+            id="de.andre.jsfnavigation.jpaQueryHover"
+            label="JPA / JPQL Mapping">
+      </hover>
+   </extension>
+
+   <extension
+         point="org.eclipse.ui.commands">
+      <category
+            id="de.andre.jsfnavigation.commands.category"
+            name="JSF / Java Navigation">
+      </category>
+
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.GoToCallerHandler"
+            description="Jump to a direct Java or JSF caller. Opens a chooser only when multiple callers exist."
+            id="de.andre.jsfnavigation.command.goToCaller"
+            name="Go to Caller">
+      </command>
+
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.GoToCalleeHandler"
+            description="Jump to a direct project method called by the current method."
+            id="de.andre.jsfnavigation.command.goToCallee"
+            name="Go to Callee">
+      </command>
+
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.FollowCallerChainHandler"
+            description="Follow callers upward while each method has exactly one direct caller."
+            id="de.andre.jsfnavigation.command.followCallerChain"
+            name="Follow Single Caller Chain">
+      </command>
+
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.FollowCalleeChainHandler"
+            description="Follow project calls downward while each method has exactly one project callee."
+            id="de.andre.jsfnavigation.command.followCalleeChain"
+            name="Follow Single Callee Chain">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.ElCompletionHandler"
+            description="Complete a JSF EL property or method after a bean/property dot."
+            id="de.andre.jsfnavigation.command.elComplete"
+            name="JSF EL Complete">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.OpenBackingBeanHandler"
+            description="Open a backing bean used by the current XHTML page."
+            id="de.andre.jsfnavigation.command.openBackingBean"
+            name="Open Backing Bean">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.FindJsfReferencesHandler"
+            description="Find update/process/render/for/PF references to the current id or widgetVar."
+            id="de.andre.jsfnavigation.command.findJsfReferences"
+            name="Find JSF References">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.PageControllerGraphHandler"
+            description="Show beans, includes, templates, widgetVars and component IDs used by the current page."
+            id="de.andre.jsfnavigation.command.pageGraph"
+            name="Show JSF Page Graph">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.JsfContextInfoHandler"
+            description="Show bean scope/page usage or PrimeFaces/RichFaces Ajax lifecycle information at the caret."
+            id="de.andre.jsfnavigation.command.contextInfo"
+            name="Show JSF Context Info">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.OpenControllerPagesHandler"
+            description="Show XHTML pages that use the current JSF/CDI controller bean."
+            id="de.andre.jsfnavigation.command.openControllerPages"
+            name="Open Controller Pages">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.SyncCurrentWebResourceHandler"
+            description="Copy the current web resource directly into the configured exploded WebSphere deployment."
+            id="de.andre.jsfnavigation.command.syncCurrentWebResource"
+            name="Sync Current Resource to WebSphere">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.OpenDeployedWebResourceHandler"
+            description="Open the deployed WebSphere copy of the current web resource."
+            id="de.andre.jsfnavigation.command.openDeployedWebResource"
+            name="Open WebSphere Deployed Copy">
+      </command>
+   </extension>
+
+   <extension
+         point="org.eclipse.ui.bindings">
+      <key
+            commandId="de.andre.jsfnavigation.command.goToCaller"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+PAGE_UP">
+      </key>
+
+      <key
+            commandId="de.andre.jsfnavigation.command.goToCallee"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+PAGE_DOWN">
+      </key>
+
+      <key
+            commandId="de.andre.jsfnavigation.command.followCallerChain"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+M3+PAGE_UP">
+      </key>
+
+      <key
+            commandId="de.andre.jsfnavigation.command.followCalleeChain"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+M3+PAGE_DOWN">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.elComplete"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+SPACE">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.openBackingBean"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+B">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.findJsfReferences"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+R">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.pageGraph"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+G">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.contextInfo"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+I">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.openControllerPages"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+P">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.syncCurrentWebResource"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+S">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.openDeployedWebResource"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+D">
+      </key>
+   </extension>
+
+   <extension
+         point="org.eclipse.core.resources.markers"
+         id="problem"
+         name="JSF Navigation Problem">
+      <super
+            type="org.eclipse.core.resources.problemmarker">
+      </super>
+      <super
+            type="org.eclipse.core.resources.textmarker">
+      </super>
+      <persistent
+            value="true">
+      </persistent>
+   </extension>
+
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            class="de.andre.jsfnavigation.JsfNavigationPreferencePage"
+            id="de.andre.jsfnavigation.preferences"
+            name="JSF / Java Navigation">
+      </page>
+      <page
+            category="de.andre.jsfnavigation.preferences"
+            class="de.andre.jsfnavigation.WebSphereHotSyncPreferencePage"
+            id="de.andre.jsfnavigation.preferences.websphere"
+            name="WebSphere Hot Sync">
+      </page>
+   </extension>
+
 </plugin>

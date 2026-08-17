@@ -371,7 +371,12 @@ public final class WebIndexService {
                 @Override
                 public boolean visit(IResourceDelta delta) throws CoreException {
                     IResource resource = delta.getResource();
-                    if (resource.getType() == IResource.FILE && isWebFile(resource.getName())) {
+                    if (resource.getType() == IResource.FILE
+                            && isWebFile(resource.getName())
+                            && (delta.getKind() == IResourceDelta.ADDED
+                                    || delta.getKind() == IResourceDelta.REMOVED
+                                    || (delta.getFlags() & IResourceDelta.CONTENT) != 0
+                                    || (delta.getFlags() & IResourceDelta.REPLACED) != 0)) {
                         pendingChanges.put(
                                 resource.getFullPath().toPortableString(),
                                 Integer.valueOf(delta.getKind()));

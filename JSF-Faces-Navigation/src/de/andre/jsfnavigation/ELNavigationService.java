@@ -53,11 +53,31 @@ public final class ELNavigationService {
                 return;
             }
 
+            String rootName = parts.get(0);
+
             IType currentType =
                     index.resolve(
-                            parts.get(0),
+                            rootName,
                             selection
                                     .getPreferredProjectName());
+
+            if (currentType == null) {
+                org.eclipse.core.resources.IFile currentFile =
+                        EditorContext.currentFile();
+
+                String alias =
+                        JsfPageInspector.resolveUiParamAlias(
+                                currentFile,
+                                rootName);
+
+                if (alias != null) {
+                    currentType =
+                            index.resolve(
+                                    alias,
+                                    selection
+                                            .getPreferredProjectName());
+                }
+            }
 
             if (currentType == null) {
                 return;

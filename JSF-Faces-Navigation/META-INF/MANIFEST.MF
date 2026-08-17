@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: JSF EL Navigation
 Bundle-SymbolicName: de.andre.jsfnavigation;singleton:=true
-Bundle-Version: 1.4.0
+Bundle-Version: 1.7.0
 Bundle-Vendor: Andre
 Bundle-RequiredExecutionEnvironment: JavaSE-1.8
 Bundle-Activator: de.andre.jsfnavigation.Activator
@@ -11,6 +11,7 @@ Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.core.resources,
  org.eclipse.ui,
  org.eclipse.ui.ide,
+ org.eclipse.core.filesystem,
  org.eclipse.jface.text,
  org.eclipse.swt,
  org.eclipse.ui.workbench.texteditor,

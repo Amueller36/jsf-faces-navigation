@@ -1,87 +1,123 @@
-# JSF EL Navigation 1.4.0
+# JSF EL Navigation 1.7.0
 
-Eclipse WTP plug-in for fast Ctrl+Click navigation between JSF/Facelets XHTML,
-Java controllers and JavaScript.
+Version 1.7 keeps all navigation, persistent indexing, diagnostics, PrimeFaces,
+RichFaces, Facelets, JPA and caller/callee features from 1.6 and adds
+development-only WebSphere hot sync.
 
-## 1.4.0
+## WebSphere Hot Sync
 
-### Richer EL navigation
+The plug-in can copy supported source web resources directly into the exploded
+WebSphere deployment after a normal Eclipse save.
 
-The detector no longer requires the whole EL expression to be a simple
-`bean.property` chain. It resolves the chain under the cursor inside expressions
-such as:
+Supported resource types are configurable:
 
-```xhtml
-#{!aumiAntragDetail.bescheidButtonVisible or aumiAntragDetail.modusLesen}
-#{aumiAntragDetail.save()}
+- `.xhtml`, `.html`, `.htm`
+- `.js`
+- `.css`
+- `.properties` (disabled by default)
+
+It intentionally does **not** copy Java classes, JARs, `web.xml`,
+`persistence.xml`, EJB metadata, or deployment descriptors.
+
+### Configure
+
+Open:
+
+`Window -> Preferences -> JSF / Java Navigation -> WebSphere Hot Sync`
+
+Recommended configuration:
+
+- Enable WebSphere hot sync
+- Enable automatic sync after save if desired
+- WebSphere profile directory, for example:
+  `F:\IBM\WebSphere\AppServer\profiles\AppSrv01`
+- Deployed web module root, for example:
+  `...\installedApps\<cell>\<application>.ear\<module>.war`
+- Project-relative source web root, for example:
+  `WebContent`
+  or
+  `src/main/webapp`
+
+The deployed web-module root is the safest configuration because it removes
+ambiguity. If it is left empty, the manual sync command can scan the configured
+profile's `installedApps` tree for exploded web-module directories and ask you
+to choose one.
+
+### Manual commands
+
+- **Ctrl+Alt+S** — Sync Current Resource to WebSphere
+- **Ctrl+Alt+D** — Open WebSphere Deployed Copy
+
+Manual sync works even if automatic sync is disabled.
+
+### Automatic save sync
+
+When both **Enable WebSphere hot sync** and **Automatically sync after save**
+are enabled, a POST_CHANGE content delta for a supported file schedules a small
+background copy job.
+
+Example:
+
+```text
+Project:
+WebContent/faces/antrag/detail.xhtml
+
+deployed web root:
+...\installedApps\MyCell\MyApp.ear\MyWeb.war
+
+target:
+...\installedApps\MyCell\MyApp.ear\MyWeb.war\faces\antrag\detail.xhtml
 ```
 
-Operators, negation, comparisons and method parentheses no longer disable the
-hyperlink detector.
+The source file is always the authoritative file. Hot sync only overwrites the
+deployed copy. Removing a source file does not automatically delete the
+deployed copy.
 
-### XHTML JavaScript navigation
+### Safety
 
-Ctrl+Click JavaScript calls in an XHTML file, for example:
+This feature is intended for a local/development WebSphere profile only.
+It deliberately syncs view/static resources, not Java bytecode or application
+configuration. Use the normal application deployment for changes that require
+classloading, metadata, persistence, EJB or descriptor updates.
 
-```xhtml
-oncomplete="preventBVsDeletion(); triggerDL(args);"
-```
+If a copied XHTML file does not immediately appear in the browser, the
+WebSphere/JSF runtime may still be configured to cache Facelets/JSP resources.
+The plug-in only performs the filesystem sync; it does not change server
+reload/cache settings.
 
-The current unsaved XHTML document is searched first. If the definition is not
-in the current document, the persistent project/workspace web index is queried.
-Supported definition styles include:
+## Existing productivity features
 
-```javascript
-function triggerDL(args) { }
-const triggerDL = function(args) { };
-const triggerDL = (args) => { };
-```
+The release still includes:
 
-### Java / PrimeFaces -> JavaScript
+- JSF EL Ctrl+Click and `ui:param` aliases
+- PrimeFaces/RichFaces component-ID navigation
+- `widgetVar` / `PF(...)` navigation
+- Facelets include/template/composite navigation
+- resource-bundle navigation/diagnostics
+- Java -> XHTML PrimeFaces/RichFaces update navigation
+- Java `executeScript(...)` -> controller-associated JavaScript definitions
+- JPQL/JPA field navigation and mapping hover
+- named-query, role and navigation-outcome navigation
+- persistent bean/web/view indexes with incremental updates
+- JSF diagnostics and EL completion
+- backing-bean/page graph/controller-page navigation
+- Go to Caller/Callee and single-call-chain traversal
 
-A second hyperlink detector is registered for the JDT Java editor target
-`org.eclipse.jdt.ui.javaCode`.
+## Shortcuts
 
-Calls inside common PrimeFaces/RequestContext script execution strings can be
-Ctrl+Clicked, for example:
+- Ctrl+Alt+Space — JSF EL Complete
+- Ctrl+Alt+B — Open Backing Bean
+- Ctrl+Alt+P — Open Controller Pages
+- Ctrl+Alt+R — Find JSF References
+- Ctrl+Alt+G — Show JSF Page Graph
+- Ctrl+Alt+I — Show JSF Context Info
+- Ctrl+Alt+S — Sync Current Resource to WebSphere
+- Ctrl+Alt+D — Open WebSphere Deployed Copy
+- Ctrl+Alt+Page Up — Go to Caller
+- Ctrl+Alt+Page Down — Go to Callee
+- Ctrl+Shift+Alt+Page Up — Follow Single Caller Chain
+- Ctrl+Shift+Alt+Page Down — Follow Single Callee Chain
 
-```java
-PrimeFaces.current().executeScript("refreshHistorieTab()");
-RequestContext.getCurrent().execute("refreshHistorieTab()");
-```
+All shortcuts can be changed under:
 
-If one JavaScript definition is found it is opened. If several are found, a
-selection dialog shows the candidate XHTML/JS files. If no JavaScript definition
-is found and the Java class is a `@ManagedBean`/`@Named` controller, the plug-in
-shows XHTML pages that reference that controller.
-
-## Persistent indexes
-
-The plug-in keeps two persistent indexes in Eclipse's plug-in state directory:
-
-- `bean-index-v1.bin`: EL bean name -> Java type
-- `web-index-v1.bin`: JavaScript definitions and XHTML controller usages
-
-They normally live below:
-
-`.metadata/.plugins/de.andre.jsfnavigation/`
-
-Both indexes are updated incrementally while Eclipse is running. Changed Java
-files update the bean index; changed `.xhtml`/`.js` files update only their web
-index entries. Stored modification stamps prevent stale file entries from being
-blindly trusted after an Eclipse restart.
-
-JDT member/type-hierarchy/return-type caches remain in memory because recreating
-those handles from JDT is cheap and safer than serializing JDT objects.
-
-## WTP editor target
-
-XHTML detector:
-
-`org.eclipse.wst.html.core.htmlsource`
-
-Java detector:
-
-`org.eclipse.jdt.ui.javaCode`
-
-The old duplicate Default Text Editor registration remains removed.
+`Window -> Preferences -> General -> Keys -> JSF / Java Navigation`
