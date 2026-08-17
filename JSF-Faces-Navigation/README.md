@@ -1,4 +1,19 @@
-# JSF EL Navigation 1.7.0
+# JSF EL Navigation 1.8.0
+
+Version 1.8 adds a persistent **JSF Flow Explorer** for layered Java EE
+development while retaining everything from 1.7.
+
+The Flow Explorer supports named task flows, automatic/manual capture,
+View/Controller/Bean/ISP/Service/Persistence grouping, Open All, and Focus Tabs.
+
+Default Flow shortcuts:
+
+- `Ctrl+Alt+F` — Add Current File to Flow
+- `Ctrl+Shift+Alt+F` — Show JSF Flow Explorer
+- `Ctrl+Shift+Alt+N` — New Development Flow
+
+The complete feature and shortcut reference is in `CHEAT-SHEET.md`.
+
 
 Version 1.7 keeps all navigation, persistent indexing, diagnostics, PrimeFaces,
 RichFaces, Facelets, JPA and caller/callee features from 1.6 and adds

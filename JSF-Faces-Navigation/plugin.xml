@@ -145,6 +145,27 @@
             id="de.andre.jsfnavigation.command.openDeployedWebResource"
             name="Open WebSphere Deployed Copy">
       </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.AddCurrentFileToFlowHandler"
+            description="Pin the current workspace file into the active development flow."
+            id="de.andre.jsfnavigation.command.addCurrentFileToFlow"
+            name="Add Current File to Flow">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.ShowFlowExplorerHandler"
+            description="Open and focus the persistent JSF Flow Explorer view."
+            id="de.andre.jsfnavigation.command.showFlowExplorer"
+            name="Show Flow Explorer">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.NewFlowHandler"
+            description="Create and activate a new named development flow."
+            id="de.andre.jsfnavigation.command.newFlow"
+            name="New Development Flow">
+      </command>
    </extension>
 
    <extension
@@ -224,6 +245,24 @@
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M3+D">
       </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.addCurrentFileToFlow"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+F">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.showFlowExplorer"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+M3+F">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.newFlow"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M2+M3+N">
+      </key>
    </extension>
 
    <extension
@@ -254,6 +293,22 @@
             id="de.andre.jsfnavigation.preferences.websphere"
             name="WebSphere Hot Sync">
       </page>
+   </extension>
+
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            id="de.andre.jsfnavigation.views.category"
+            name="JSF / Java Navigation">
+      </category>
+      <view
+            allowMultiple="false"
+            category="de.andre.jsfnavigation.views.category"
+            class="de.andre.jsfnavigation.FlowExplorerView"
+            id="de.andre.jsfnavigation.views.flowExplorer"
+            name="JSF Flow Explorer"
+            restorable="true">
+      </view>
    </extension>
 
 </plugin>

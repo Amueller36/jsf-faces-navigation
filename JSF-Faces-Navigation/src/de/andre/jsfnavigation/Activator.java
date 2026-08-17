@@ -2,6 +2,7 @@ package de.andre.jsfnavigation;
 
 import java.io.File;
 
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
@@ -15,6 +16,8 @@ public final class Activator extends AbstractUIPlugin {
     private JsfViewIndexService jsfViewIndexService;
     private JsfDiagnosticsService jsfDiagnosticsService;
     private WebSphereHotSyncService webSphereHotSyncService;
+    private FlowExplorerService flowExplorerService;
+    private FlowExplorerWorkbenchListener flowWorkbenchListener;
 
     @Override
     public void start(BundleContext context) throws Exception {
@@ -36,6 +39,10 @@ public final class Activator extends AbstractUIPlugin {
                 .append("jsf-view-index-v1.bin")
                 .toFile();
 
+        File flowStateFile = getStateLocation()
+                .append("flow-explorer-v1.bin")
+                .toFile();
+
         beanIndexService = new BeanIndexService(beanIndexFile);
         beanIndexService.start();
 
@@ -50,11 +57,29 @@ public final class Activator extends AbstractUIPlugin {
 
         webSphereHotSyncService = new WebSphereHotSyncService();
         webSphereHotSyncService.start();
+
+        flowExplorerService = new FlowExplorerService(flowStateFile);
+        flowExplorerService.start();
+
+        if (PlatformUI.isWorkbenchRunning()) {
+            flowWorkbenchListener = new FlowExplorerWorkbenchListener();
+            flowWorkbenchListener.start();
+        }
     }
 
     @Override
     public void stop(BundleContext context) throws Exception {
         try {
+            if (flowWorkbenchListener != null) {
+                flowWorkbenchListener.stop();
+                flowWorkbenchListener = null;
+            }
+
+            if (flowExplorerService != null) {
+                flowExplorerService.stop();
+                flowExplorerService = null;
+            }
+
             if (webSphereHotSyncService != null) {
                 webSphereHotSyncService.stop();
                 webSphereHotSyncService = null;
@@ -110,5 +135,10 @@ public final class Activator extends AbstractUIPlugin {
     public static WebSphereHotSyncService getWebSphereHotSyncService() {
         Activator plugin = instance;
         return plugin == null ? null : plugin.webSphereHotSyncService;
+    }
+
+    public static FlowExplorerService getFlowExplorerService() {
+        Activator plugin = instance;
+        return plugin == null ? null : plugin.flowExplorerService;
     }
 }

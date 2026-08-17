@@ -2,18 +2,18 @@
 <feature
       id="de.andre.jsfnavigation.feature"
       label="JSF EL Navigation"
-      version="1.7.0"
+      version="1.8.0"
       provider-name="Andre">
 
    <description>
-      PrimeFaces/RichFaces/Facelets navigation, diagnostics, persistent indexes, JPQL/caller navigation and development WebSphere hot sync.
+      PrimeFaces/RichFaces/Facelets productivity navigation, persistent task Flow Explorer, diagnostics, JPQL/caller navigation and WebSphere hot sync.
    </description>
 
    <plugin
          id="de.andre.jsfnavigation"
          download-size="0"
          install-size="0"
-         version="1.7.0"
+         version="1.8.0"
          unpack="false"/>
 
 </feature>
