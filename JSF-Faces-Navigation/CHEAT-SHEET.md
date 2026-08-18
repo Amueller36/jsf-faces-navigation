@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.9 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.10 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -693,3 +693,189 @@ D:\CustomWAS\profiles\AppSrv01\installedApps\MyCell\
 The important path for hot sync/logs is normally the **profile path**, not the
 WebSphere installation (`AppServer`) root itself.
 
+
+---
+
+## Smart WebSphere Deploy (opt-in)
+
+Configure:
+
+`Window -> Preferences -> JSF / Java Navigation -> WebSphere Hot Sync`
+
+Enable:
+
+`Enable Smart Java/Class Deploy after Eclipse builds (opt-in)`
+
+This feature is **off by default**.
+
+When enabled, the plug-in listens for Eclipse Java build output changes and
+learns mappings between Eclipse output folders and deployed WebSphere modules.
+
+### WAR classes
+
+For classes deployed as:
+
+```text
+SomeApp.ear/
+  SomeWeb.war/
+    WEB-INF/classes/com/company/Foo.class
+```
+
+the plug-in copies the changed Eclipse-generated `.class` files directly into
+the matching exploded `WEB-INF/classes` directory.
+
+It also handles compiler-generated inner/anonymous classes:
+
+```text
+Foo.class
+Foo$1.class
+Foo$2.class
+Foo$Inner.class
+```
+
+and removes stale deployed `$...class` files when the local compiler output no
+longer contains them.
+
+### JAR / EJB / EAR library classes
+
+For a compiled class that already exists inside a top-level JAR or an EAR
+`lib/*.jar`, the plug-in does **not** rewrite the JAR itself.
+
+Instead it starts `wsadmin` once for the batch and uses WebSphere
+`AdminApp.update(..., 'file', ...)` single-file application updates with a
+`contenturi` pointing into the JAR.
+
+That lets a class such as:
+
+```text
+com/company/service/FooBean.class
+```
+
+be updated inside:
+
+```text
+VATrefund-Online.ear/vr-antragsteller-core.jar
+```
+
+without rebuilding the complete EAR.
+
+New generated inner classes use the WebSphere file `add` operation; changed
+classes use `update`; stale inner classes use `delete`.
+
+### Multiple applications
+
+Discovery scans all exploded EARs below:
+
+```text
+<profile>/installedApps/<cell>/
+```
+
+so separate projects can map to different applications automatically.
+
+Examples:
+
+```text
+VATrefundWeb output
+  -> VATrefund-Online.ear / VATrefundWeb.war
+
+Batch output
+  -> VATrefund-Batch.ear / ...
+
+Kaba output
+  -> VATrefund-Kaba.ear / ...
+```
+
+If exactly one deployed module contains the class, the plug-in learns the
+mapping automatically.
+
+If several modules contain the same class, a chooser appears once and the
+selected mapping is persisted.
+
+Use **Forget learned Smart Deploy mappings** in the WebSphere preference page
+if a project/module mapping changes.
+
+### Smart web-resource recognition
+
+With Smart Deploy enabled, XHTML/JS/CSS hot sync can also discover the correct
+WAR across multiple EARs by matching the resource's relative web path.
+
+This is useful for an EAR containing several web modules such as:
+
+```text
+VATrefund-Online.ear/
+  VATrefundWeb.war/
+  vatrefund-was-antragsteller.war/
+  vatrefund-was-postbuch.war/
+  vatrefund-was-textbausteine.war/
+```
+
+Learned mappings are persisted so subsequent saves do not rescan every module.
+
+### wsadmin
+
+For JAR/archive updates, the plug-in resolves:
+
+```text
+<profile>/bin/wsadmin.bat
+```
+
+or:
+
+```text
+<profile>/bin/wsadmin.sh
+```
+
+automatically.
+
+You can override it using:
+
+`wsadmin executable override`
+
+and supply normal additional wsadmin command-line options in:
+
+`wsadmin extra arguments`
+
+For example, environments that require connection/authentication options can
+supply them there.
+
+Smart Java deploy requires Eclipse to actually compile the saved Java source.
+Normally that means **Project -> Build Automatically** must be enabled.
+
+
+### Search inside logs
+
+With focus in `SystemOut.log`, `SystemErr.log`, or the Smart Deploy tab:
+
+`Ctrl+F`
+
+opens the built-in search bar.
+
+- typing searches immediately
+- Enter / Next moves forward
+- Previous moves backward
+- Escape closes the search bar
+- search remains usable while auto-refresh is running
+
+### Log highlighting
+
+The log view styles common:
+
+- errors / exceptions
+- warnings
+- informational messages
+- Java stack-trace frames
+
+Stack-trace source frames are underlined and clickable.
+
+Example:
+
+```text
+at de.zivit.ustv.vatrefund.guiclient.controller.DetailsichtAntraegeController.save(DetailsichtAntraegeController.java:418)
+```
+
+Clicking the frame searches the Eclipse Java projects for the matching class
+and opens the source directly at the reported line. If the same type exists in
+multiple workspace projects, a chooser is shown.
+
+The view also has a **Smart Deploy** tab that shows wsadmin output/errors from
+archive-class updates.

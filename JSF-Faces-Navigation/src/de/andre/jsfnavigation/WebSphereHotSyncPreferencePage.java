@@ -3,7 +3,12 @@ package de.andre.jsfnavigation;
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.DirectoryFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
+import org.eclipse.jface.preference.FileFieldEditor;
 import org.eclipse.jface.preference.StringFieldEditor;
+import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.SelectionAdapter;
+import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchPreferencePage;
 
@@ -87,6 +92,57 @@ public final class WebSphereHotSyncPreferencePage
                         WebSphereLogSettings.AUTO_REFRESH,
                         "Automatically refresh WebSphere log view",
                         getFieldEditorParent()));
+
+        addField(
+                new BooleanFieldEditor(
+                        SmartDeploySettings.ENABLED,
+                        "Enable Smart Java/Class Deploy after Eclipse builds (opt-in)",
+                        getFieldEditorParent()));
+
+        FileFieldEditor wsadmin =
+                new FileFieldEditor(
+                        SmartDeploySettings.WSADMIN_PATH,
+                        "wsadmin executable override (optional):",
+                        getFieldEditorParent());
+
+        wsadmin.setEmptyStringAllowed(true);
+        addField(wsadmin);
+
+        addField(
+                new StringFieldEditor(
+                        SmartDeploySettings.WSADMIN_EXTRA_ARGS,
+                        "wsadmin extra arguments (optional):",
+                        getFieldEditorParent()));
+
+        Button clearMappings =
+                new Button(
+                        getFieldEditorParent(),
+                        SWT.PUSH);
+
+        clearMappings.setText(
+                "Forget learned Smart Deploy mappings");
+
+        clearMappings.setToolTipText(
+                "Clears remembered Eclipse output-folder -> deployed module mappings. "
+                + "The plug-in will rediscover and ask again on the next matching build.");
+
+        clearMappings.addSelectionListener(
+                new SelectionAdapter() {
+                    @Override
+                    public void widgetSelected(
+                            SelectionEvent e) {
+
+                        SmartDeployMappingStore mappings =
+                                Activator.getSmartDeployMappingStore();
+
+                        if (mappings != null) {
+                            mappings.clear();
+
+                            WebSphereStatusLine.show(
+                                    "Smart Deploy mappings cleared.");
+                        }
+                    }
+                });
 
         addField(
                 new BooleanFieldEditor(

@@ -1,4 +1,13 @@
-# JSF EL Navigation 1.9.0
+# JSF EL Navigation 1.10.0
+
+Version 1.10 adds opt-in **Smart WebSphere Deploy** across multiple installed
+EARs. It recognizes exploded WAR classes, top-level/EAR-lib JAR classes, and
+web-resource module mappings. JAR-backed classes use WebSphere single-file
+`AdminApp.update` operations through `wsadmin` rather than rebuilding the
+entire EAR.
+
+The WebSphere Logs view now has `Ctrl+F` search, severity/stack-trace
+highlighting, clickable Java stack frames, and a Smart Deploy output tab.
 
 Version 1.9 adds a built-in **WebSphere Logs** view. `Ctrl+Alt+L` toggles
 `SystemOut.log` / `SystemErr.log` inside Eclipse with background auto-refresh.

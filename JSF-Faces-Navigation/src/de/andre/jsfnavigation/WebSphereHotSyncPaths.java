@@ -102,6 +102,25 @@ public final class WebSphereHotSyncPaths {
         File root =
                 configuredDeployedWebRoot();
 
+        if (SmartDeploySettings.isEnabled()) {
+            File smartRoot =
+                    SmartWebResourceResolver.resolveWebRoot(
+                            source,
+                            relative);
+
+            if (smartRoot != null) {
+                return new File(
+                        smartRoot,
+                        relative.toOSString());
+            }
+        }
+
+        if (root != null) {
+            return new File(
+                    root,
+                    relative.toOSString());
+        }
+
         if (root == null) {
             List<File> candidates =
                     discoverDeployedWebRoots();

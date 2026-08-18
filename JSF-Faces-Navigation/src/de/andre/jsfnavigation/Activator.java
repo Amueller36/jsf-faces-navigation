@@ -18,6 +18,8 @@ public final class Activator extends AbstractUIPlugin {
     private WebSphereHotSyncService webSphereHotSyncService;
     private FlowExplorerService flowExplorerService;
     private FlowExplorerWorkbenchListener flowWorkbenchListener;
+    private SmartDeployMappingStore smartDeployMappingStore;
+    private SmartDeployService smartDeployService;
 
     @Override
     public void start(BundleContext context) throws Exception {
@@ -28,6 +30,9 @@ public final class Activator extends AbstractUIPlugin {
                 getPreferenceStore());
 
         WebSphereLogSettings.initializeDefaults(
+                getPreferenceStore());
+
+        SmartDeploySettings.initializeDefaults(
                 getPreferenceStore());
 
         File beanIndexFile = getStateLocation()
@@ -46,6 +51,10 @@ public final class Activator extends AbstractUIPlugin {
                 .append("flow-explorer-v1.bin")
                 .toFile();
 
+        File smartDeployMappingFile = getStateLocation()
+                .append("smart-deploy-mappings-v1.bin")
+                .toFile();
+
         beanIndexService = new BeanIndexService(beanIndexFile);
         beanIndexService.start();
 
@@ -60,6 +69,16 @@ public final class Activator extends AbstractUIPlugin {
 
         webSphereHotSyncService = new WebSphereHotSyncService();
         webSphereHotSyncService.start();
+
+        smartDeployMappingStore =
+                new SmartDeployMappingStore(
+                        smartDeployMappingFile);
+        smartDeployMappingStore.start();
+
+        smartDeployService =
+                new SmartDeployService(
+                        smartDeployMappingStore);
+        smartDeployService.start();
 
         flowExplorerService = new FlowExplorerService(flowStateFile);
         flowExplorerService.start();
@@ -81,6 +100,16 @@ public final class Activator extends AbstractUIPlugin {
             if (flowExplorerService != null) {
                 flowExplorerService.stop();
                 flowExplorerService = null;
+            }
+
+            if (smartDeployService != null) {
+                smartDeployService.stop();
+                smartDeployService = null;
+            }
+
+            if (smartDeployMappingStore != null) {
+                smartDeployMappingStore.stop();
+                smartDeployMappingStore = null;
             }
 
             if (webSphereHotSyncService != null) {
@@ -143,5 +172,10 @@ public final class Activator extends AbstractUIPlugin {
     public static FlowExplorerService getFlowExplorerService() {
         Activator plugin = instance;
         return plugin == null ? null : plugin.flowExplorerService;
+    }
+
+    public static SmartDeployMappingStore getSmartDeployMappingStore() {
+        Activator plugin = instance;
+        return plugin == null ? null : plugin.smartDeployMappingStore;
     }
 }
