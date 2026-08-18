@@ -24,6 +24,14 @@ public final class JsfPageInspector {
                     "<\\s*(?:ui:param|c:set|ui:repeat|a4j:repeat|h:dataTable|p:dataTable|rich:dataTable|f:selectItems)\\b[^>]*\\b(?:name|var)\\s*=\\s*(['\"])([A-Za-z_$][A-Za-z0-9_$]*)\\1",
                     Pattern.DOTALL);
 
+    private static final Pattern UI_PARAM_ALIAS =
+            Pattern.compile(
+                    "<\\s*ui:param\\b"
+                    + "(?=[^>]*\\bname\\s*=\\s*(['\"])([A-Za-z_$][A-Za-z0-9_$]*)\\1)"
+                    + "(?=[^>]*\\bvalue\\s*=\\s*(['\"])\\s*[#\\$]\\{\\s*([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\}\\3)"
+                    + "[^>]*>",
+                    Pattern.DOTALL);
+
     private JsfPageInspector() {
     }
 
