@@ -7,8 +7,6 @@ import java.util.regex.Pattern;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.StyleRange;
 import org.eclipse.swt.custom.StyledText;
-import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.widgets.Display;
 
 public final class LogSyntaxHighlighter {
 
@@ -39,25 +37,6 @@ public final class LogSyntaxHighlighter {
             return;
         }
 
-        Display display =
-                text.getDisplay();
-
-        Color error =
-                display.getSystemColor(
-                        SWT.COLOR_RED);
-
-        Color warning =
-                display.getSystemColor(
-                        SWT.COLOR_DARK_YELLOW);
-
-        Color info =
-                display.getSystemColor(
-                        SWT.COLOR_DARK_GREEN);
-
-        Color stack =
-                display.getSystemColor(
-                        SWT.COLOR_BLUE);
-
         List<StyleRange> styles =
                 new ArrayList<StyleRange>();
 
@@ -75,51 +54,61 @@ public final class LogSyntaxHighlighter {
             String line =
                     text.getLine(lineIndex);
 
-            if (line == null) {
-                line = "";
+            if (line == null
+                    || line.isEmpty()) {
+
+                continue;
             }
 
             if (StackTraceNavigator
                     .looksNavigable(line)) {
 
+                /*
+                 * Keep the theme's normal foreground color. Only underline
+                 * navigable stack frames so they remain readable on both
+                 * dark and light Eclipse themes.
+                 */
                 StyleRange style =
-                        new StyleRange(
-                                offset,
-                                line.length(),
-                                stack,
-                                null);
+                        new StyleRange();
 
+                style.start = offset;
+                style.length = line.length();
                 style.underline = true;
+
                 styles.add(style);
 
             } else if (isError(line)) {
+                /*
+                 * Do not force bright red on the complete line. The normal
+                 * theme foreground stays intact; bold is enough to make
+                 * errors stand out without destroying readability.
+                 */
                 StyleRange style =
-                        new StyleRange(
-                                offset,
-                                line.length(),
-                                error,
-                                null,
-                                SWT.BOLD);
+                        new StyleRange();
+
+                style.start = offset;
+                style.length = line.length();
+                style.fontStyle = SWT.BOLD;
 
                 styles.add(style);
 
             } else if (isWarning(line)) {
-                styles.add(
-                        new StyleRange(
-                                offset,
-                                line.length(),
-                                warning,
-                                null));
+                StyleRange style =
+                        new StyleRange();
+
+                style.start = offset;
+                style.length = line.length();
+                style.fontStyle = SWT.BOLD;
+
+                styles.add(style);
 
             } else if (isInfo(line)) {
-                styles.add(
-                        new StyleRange(
-                                offset,
-                                line.length(),
-                                info,
-                                null));
+                /*
+                 * Intentionally leave INFO lines unstyled. INFO usually makes
+                 * up most of SystemOut.log and coloring every line creates a
+                 * visually noisy "wall of green" on dark themes.
+                 */
             }
-
         }
 
         text.setStyleRanges(

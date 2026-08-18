@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.10 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.10.3 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -879,3 +879,80 @@ multiple workspace projects, a chooser is shown.
 
 The view also has a **Smart Deploy** tab that shows wsadmin output/errors from
 archive-class updates.
+
+### Smart Deploy progress
+
+While Smart Deploy is running, the WebSphere Logs view shows a progress bar and
+phase, for example:
+
+```text
+5%  — Detected changed classes
+15% — Resolving deployed module mappings
+30% — Preparing JAR/application updates
+50% — Running wsadmin single-file update
+80% — Waiting for WebSphere reload/log output
+100% — Smart Deploy finished; watching WebSphere logs
+```
+
+The deploy also appears in Eclipse's normal **Progress** view.
+
+For about 12 seconds after the deploy reaches the WebSphere reload phase, the
+log reader temporarily refreshes every ~250 ms instead of every second. This
+does not make WebSphere itself reload faster, but it makes new `SystemOut.log`
+and `SystemErr.log` lines appear in Eclipse as soon as the files change.
+
+### Log filtering
+
+Click **Filter** or press:
+
+`Ctrl+Shift+F`
+
+The active filter is applied line-by-line to all three log tabs. Only lines
+containing the filter text are shown; the original log data remains untouched.
+
+The filter bar shows how many matching lines exist in the active tab. Clear the
+filter to immediately restore the complete log tail.
+
+`Ctrl+F` remains the normal find/search function *inside the currently visible
+(filtered) text*.
+
+### Log font zoom
+
+Use the toolbar buttons:
+
+- `A-` — smaller
+- `A+` — larger
+- `A` — reset
+
+or:
+
+- `Ctrl+-`
+- `Ctrl++`
+- `Ctrl+0`
+- `Ctrl+Mouse Wheel`
+
+The log viewer uses Eclipse's text font as its base and changes only the log
+view's font.
+
+### Scroll-aware auto-scroll
+
+The log viewer follows new lines only while you are at the bottom.
+
+If you manually scroll upward:
+
+```text
+new log refresh
+    -> current position is preserved
+    -> no jump back to the bottom
+```
+
+When you scroll all the way back to the bottom, automatic following turns back
+on automatically.
+
+This applies independently to `SystemOut.log`, `SystemErr.log`, and the Smart
+Deploy tab.
+
+### Resizable Page / Controller Graph
+
+`Ctrl+Alt+G` now opens the JSF Page / Controller Graph in a resizable,
+maximizable dialog instead of a fixed-size information popup.

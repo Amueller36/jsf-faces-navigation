@@ -169,7 +169,12 @@ public final class SmartDeployService {
                     }
                 };
 
-        job.setSystem(true);
+        /*
+         * Keep the job visible to Eclipse's normal Progress UI as well as the
+         * dedicated progress bar in the WebSphere Logs view.
+         */
+        job.setSystem(false);
+        job.setUser(false);
         job.schedule(650L);
     }
 
@@ -205,6 +210,12 @@ public final class SmartDeployService {
             return;
         }
 
+        WebSphereLogsView.deployProgress(
+                5,
+                "Detected "
+                        + changes.size()
+                        + " changed class file(s)");
+
         Map<String, List<SmartDeployClassChange>> byOutput =
                 new LinkedHashMap<String, List<SmartDeployClassChange>>();
 
@@ -227,6 +238,10 @@ public final class SmartDeployService {
         List<SmartDeployWsadminRunner.ArchiveOperation> archiveOperations =
                 new ArrayList<SmartDeployWsadminRunner.ArchiveOperation>();
 
+        WebSphereLogsView.deployProgress(
+                15,
+                "Resolving deployed module mappings");
+
         for (Map.Entry<String, List<SmartDeployClassChange>> entry :
                 byOutput.entrySet()) {
 
@@ -246,11 +261,22 @@ public final class SmartDeployService {
                 if (target.getKind()
                         == SmartDeployTarget.EXPLODED_WAR_CLASSES) {
 
+                    WebSphereLogsView.deployProgress(
+                            45,
+                            "Copying changed WAR classes");
+
                     syncWarClasses(
                             target,
                             group);
 
+                    WebSphereLogsView.deployProgress(
+                            80,
+                            "WAR classes copied; waiting for WebSphere reload/log output");
+
                 } else {
+                    WebSphereLogsView.deployProgress(
+                            30,
+                            "Preparing JAR/application file updates");
                     archiveOperations.addAll(
                             archiveOperations(
                                     target,
@@ -261,11 +287,18 @@ public final class SmartDeployService {
                 WebSphereStatusLine.show(
                         "Smart Deploy failed: "
                         + e.getMessage());
+
+                WebSphereLogsView.deployFailed(
+                        e.getMessage());
             }
         }
 
         if (!archiveOperations.isEmpty()) {
             try {
+                WebSphereLogsView.deployProgress(
+                        50,
+                        "Running wsadmin single-file update");
+
                 String output =
                         SmartDeployWsadminRunner.apply(
                                 deduplicate(
@@ -279,6 +312,9 @@ public final class SmartDeployService {
                 WebSphereLogsView.appendDeployStatus(
                         output);
 
+                WebSphereLogsView.deployFinished(
+                        "Smart Deploy finished; watching WebSphere logs");
+
             } catch (Exception e) {
                 WebSphereStatusLine.show(
                         "Smart Deploy wsadmin failed: "
@@ -287,7 +323,14 @@ public final class SmartDeployService {
                 WebSphereLogsView.appendDeployStatus(
                         "Smart Deploy wsadmin failed:\n"
                         + e.getMessage());
+
+                WebSphereLogsView.deployFailed(
+                        e.getMessage());
             }
+
+        } else {
+            WebSphereLogsView.deployFinished(
+                    "Smart Deploy finished; watching WebSphere logs");
         }
     }
 

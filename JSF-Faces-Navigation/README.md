@@ -1,4 +1,21 @@
-# JSF EL Navigation 1.10.0
+# JSF EL Navigation 1.10.3
+
+Version 1.10.3 improves the WebSphere Logs view with line filtering, font zoom
+controls and scroll-aware auto-scroll. Scrolling upward pauses auto-follow so
+refreshes keep the same place; scrolling back to the bottom automatically
+reenables following. The JSF Page / Controller Graph is now a normal resizable,
+maximizable dialog.
+
+Version 1.10.2 adds visible Smart Deploy progress and faster log pickup after a deploy.
+The WebSphere Logs view now shows the current deploy phase and percentage, while
+the same deploy also appears in Eclipse's standard Progress UI. During and just
+after deployment, log refresh temporarily accelerates so WebSphere reload/startup
+messages appear with less delay.
+
+Version 1.10.1 changes the WebSphere log styling to be theme-friendly:
+normal/INFO text uses the Eclipse theme foreground, errors and warnings use
+font emphasis instead of neon line colors, and clickable stack traces use
+underline without forcing bright blue text.
 
 Version 1.10 adds opt-in **Smart WebSphere Deploy** across multiple installed
 EARs. It recognizes exploded WAR classes, top-level/EAR-lib JAR classes, and

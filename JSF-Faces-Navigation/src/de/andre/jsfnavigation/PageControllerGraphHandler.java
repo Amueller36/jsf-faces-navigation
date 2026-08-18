@@ -6,7 +6,6 @@ import org.eclipse.core.commands.AbstractHandler;
 import org.eclipse.core.commands.ExecutionEvent;
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.resources.IFile;
-import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.PlatformUI;
 
@@ -38,10 +37,12 @@ public final class PageControllerGraphHandler
                                                 .getActiveWorkbenchWindow()
                                                 .getShell();
 
-                                MessageDialog.openInformation(
-                                        shell,
-                                        "JSF Page / Controller Graph",
-                                        text);
+                                PageControllerGraphDialog dialog =
+                                        new PageControllerGraphDialog(
+                                                shell,
+                                                text);
+
+                                dialog.open();
                             }
                         });
 
