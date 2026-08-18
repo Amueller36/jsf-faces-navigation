@@ -68,6 +68,27 @@ public final class WebSphereHotSyncPreferencePage
                         getFieldEditorParent()));
 
         addField(
+                new StringFieldEditor(
+                        WebSphereLogSettings.SERVER_NAME,
+                        "WebSphere server name (for example server1):",
+                        getFieldEditorParent()));
+
+        DirectoryFieldEditor logDirectory =
+                new DirectoryFieldEditor(
+                        WebSphereLogSettings.LOG_DIRECTORY,
+                        "Log directory override (optional):",
+                        getFieldEditorParent());
+
+        logDirectory.setEmptyStringAllowed(true);
+        addField(logDirectory);
+
+        addField(
+                new BooleanFieldEditor(
+                        WebSphereLogSettings.AUTO_REFRESH,
+                        "Automatically refresh WebSphere log view",
+                        getFieldEditorParent()));
+
+        addField(
                 new BooleanFieldEditor(
                         WebSphereHotSyncSettings.SYNC_XHTML,
                         "Sync .xhtml / .html / .htm",

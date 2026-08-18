@@ -27,6 +27,9 @@ public final class Activator extends AbstractUIPlugin {
         WebSphereHotSyncSettings.initializeDefaults(
                 getPreferenceStore());
 
+        WebSphereLogSettings.initializeDefaults(
+                getPreferenceStore());
+
         File beanIndexFile = getStateLocation()
                 .append("bean-index-v1.bin")
                 .toFile();

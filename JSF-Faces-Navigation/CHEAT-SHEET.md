@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.8 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.9 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -16,6 +16,7 @@
 | Show JSF context / Ajax info | `Ctrl+Alt+I` | `Cmd+Option+I` |
 | Sync current web resource to WebSphere | `Ctrl+Alt+S` | `Cmd+Option+S` |
 | Open WebSphere deployed copy | `Ctrl+Alt+D` | `Cmd+Option+D` |
+| Toggle WebSphere logs | `Ctrl+Alt+L` | `Cmd+Option+L` |
 | Add current file to active Flow | `Ctrl+Alt+F` | `Cmd+Option+F` |
 | Show JSF Flow Explorer | `Ctrl+Shift+Alt+F` | `Cmd+Shift+Option+F` |
 | Create new Development Flow | `Ctrl+Shift+Alt+N` | `Cmd+Shift+Option+N` |
@@ -617,3 +618,78 @@ If the custom JPQL/JPA hover is disabled in the Eclipse installation:
 and enable:
 
 `JPA / JPQL Mapping`
+
+---
+
+## WebSphere Logs
+
+Press:
+
+`Ctrl+Alt+L`
+
+to **toggle** the WebSphere Logs view.
+
+- If the view is closed, the shortcut opens it.
+- If the view is visible, the same shortcut closes it.
+- The view contains separate tabs for `SystemOut.log` and `SystemErr.log`.
+- With **Auto refresh** enabled, the tail of both files is refreshed every
+  second.
+- Log file reading happens in an Eclipse background Job so large logs do not
+  block the editor UI.
+- **Clear View** only clears the text currently displayed in Eclipse. It never
+  truncates or modifies the real WebSphere log files.
+
+The view reads only the tail of each log (256 KiB by default), so a multi-GB
+server log is not loaded into memory.
+
+### Custom WebSphere path
+
+The plug-in does not assume that WebSphere is installed under IBM's default
+directory.
+
+Configure:
+
+`Window -> Preferences -> JSF / Java Navigation -> WebSphere Hot Sync`
+
+Set **WebSphere profile directory** to the real profile you use, for example:
+
+```text
+D:\CompanyTools\WebSphere\AppServer\profiles\AppSrv01
+```
+
+or any other custom location.
+
+For logs, the plug-in then looks under:
+
+```text
+<profile>\logs\<server-name>\SystemOut.log
+<profile>\logs\<server-name>\SystemErr.log
+```
+
+Set **WebSphere server name** if you know it, for example:
+
+```text
+server1
+```
+
+If multiple server log directories exist and no server is configured, opening
+the log view presents a chooser and remembers the selected directory.
+
+You can also bypass discovery completely using **Log directory override**, for
+example:
+
+```text
+D:\CustomWAS\profiles\AppSrv01\logs\server1
+```
+
+For XHTML hot sync, the **Deployed web module root** remains independently
+configurable, for example:
+
+```text
+D:\CustomWAS\profiles\AppSrv01\installedApps\MyCell\
+    VatRefundOnline.ear\VatRefundOnlineWeb.war
+```
+
+The important path for hot sync/logs is normally the **profile path**, not the
+WebSphere installation (`AppServer`) root itself.
+

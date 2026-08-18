@@ -1,4 +1,10 @@
-# JSF EL Navigation 1.8.0
+# JSF EL Navigation 1.9.0
+
+Version 1.9 adds a built-in **WebSphere Logs** view. `Ctrl+Alt+L` toggles
+`SystemOut.log` / `SystemErr.log` inside Eclipse with background auto-refresh.
+Custom WebSphere profile paths and an explicit log-directory override are
+supported.
+
 
 Version 1.8 adds a persistent **JSF Flow Explorer** for layered Java EE
 development while retaining everything from 1.7.

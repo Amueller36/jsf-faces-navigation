@@ -166,6 +166,13 @@
             id="de.andre.jsfnavigation.command.newFlow"
             name="New Development Flow">
       </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.ToggleWebSphereLogsHandler"
+            description="Open or close the live WebSphere SystemOut/SystemErr log view."
+            id="de.andre.jsfnavigation.command.toggleWebSphereLogs"
+            name="Toggle WebSphere Logs">
+      </command>
    </extension>
 
    <extension
@@ -263,6 +270,12 @@
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M2+M3+N">
       </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.toggleWebSphereLogs"
+            contextId="org.eclipse.ui.contexts.window"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+L">
+      </key>
    </extension>
 
    <extension
@@ -307,6 +320,14 @@
             class="de.andre.jsfnavigation.FlowExplorerView"
             id="de.andre.jsfnavigation.views.flowExplorer"
             name="JSF Flow Explorer"
+            restorable="true">
+      </view>
+      <view
+            allowMultiple="false"
+            category="de.andre.jsfnavigation.views.category"
+            class="de.andre.jsfnavigation.WebSphereLogsView"
+            id="de.andre.jsfnavigation.views.webSphereLogs"
+            name="WebSphere Logs"
             restorable="true">
       </view>
    </extension>
