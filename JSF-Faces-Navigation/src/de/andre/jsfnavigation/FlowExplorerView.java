@@ -1,7 +1,6 @@
 package de.andre.jsfnavigation;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import org.eclipse.core.resources.IFile;
@@ -19,6 +18,8 @@ import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.KeyAdapter;
+import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.layout.GridData;
@@ -77,232 +78,327 @@ public final class FlowExplorerView
         refresh();
     }
 
-    private void createHeader(
-            Composite parent) {
+private void createHeader(
+        Composite parent) {
 
-        Composite row =
-                new Composite(
-                        parent,
-                        SWT.NONE);
+    /*
+     * Do not put every control into one giant GridLayout row. Eclipse
+     * views are often docked very narrowly; a single row caused the
+     * right-most actions (especially Remove/Auto) to disappear.
+     *
+     * The header is deliberately split into compact rows so the view
+     * remains usable when docked beside the editor.
+     */
+    Composite header =
+            new Composite(
+                    parent,
+                    SWT.NONE);
 
-        row.setLayoutData(
-                new GridData(
-                        SWT.FILL,
-                        SWT.TOP,
-                        true,
-                        false));
+    header.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.TOP,
+                    true,
+                    false));
 
-        GridLayout layout =
-                new GridLayout(10, false);
+    GridLayout headerLayout =
+            new GridLayout(1, false);
 
-        layout.marginWidth = 0;
-        layout.marginHeight = 0;
-        row.setLayout(layout);
+    headerLayout.marginWidth = 0;
+    headerLayout.marginHeight = 0;
+    headerLayout.verticalSpacing = 3;
 
-        new Label(row, SWT.NONE)
-                .setText("Flow:");
+    header.setLayout(
+            headerLayout);
 
-        flowCombo =
-                new Combo(
-                        row,
-                        SWT.DROP_DOWN
-                        | SWT.READ_ONLY);
+    createFlowRow(header);
+    createPrimaryActionsRow(header);
+    createSecondaryActionsRow(header);
 
-        flowCombo.setLayoutData(
-                new GridData(
-                        SWT.FILL,
-                        SWT.CENTER,
-                        true,
-                        false));
+    summaryLabel =
+            new Label(
+                    header,
+                    SWT.NONE);
 
-        flowCombo.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    summaryLabel.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.TOP,
+                    true,
+                    false));
+}
 
-                        FlowExplorerService service =
-                                service();
+private void createFlowRow(
+        Composite parent) {
 
-                        if (service != null
-                                && flowCombo.getSelectionIndex()
-                                        >= 0) {
+    Composite row =
+            new Composite(
+                    parent,
+                    SWT.NONE);
 
-                            service.setCurrentFlow(
-                                    flowCombo.getText());
+    row.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.TOP,
+                    true,
+                    false));
 
-                            refresh();
-                        }
+    GridLayout layout =
+            new GridLayout(3, false);
+
+    layout.marginWidth = 0;
+    layout.marginHeight = 0;
+
+    row.setLayout(layout);
+
+    new Label(
+            row,
+            SWT.NONE)
+            .setText("Flow:");
+
+    flowCombo =
+            new Combo(
+                    row,
+                    SWT.DROP_DOWN
+                    | SWT.READ_ONLY);
+
+    flowCombo.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.CENTER,
+                    true,
+                    false));
+
+    flowCombo.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    FlowExplorerService service =
+                            service();
+
+                    if (service != null
+                            && flowCombo.getSelectionIndex()
+                                    >= 0) {
+
+                        service.setCurrentFlow(
+                                flowCombo.getText());
+
+                        refresh();
                     }
-                });
+                }
+            });
 
-        Button add =
-                new Button(
-                        row,
-                        SWT.PUSH);
+    autoCaptureButton =
+            new Button(
+                    row,
+                    SWT.CHECK);
 
-        add.setText("+ File");
-        add.setToolTipText(
-                "Add the current editor file to this flow.");
+    autoCaptureButton.setText("Auto");
+    autoCaptureButton.setToolTipText(
+            "Automatically add workspace files when they are opened/activated.");
 
-        add.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    autoCaptureButton.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-                        addCurrentFile();
+                    FlowExplorerService service =
+                            service();
+
+                    if (service != null) {
+                        service.setAutoCapture(
+                                autoCaptureButton
+                                        .getSelection());
                     }
-                });
+                }
+            });
+}
 
-        Button newFlow =
-                new Button(
-                        row,
-                        SWT.PUSH);
+private void createPrimaryActionsRow(
+        Composite parent) {
 
-        newFlow.setText("+ Flow");
-        newFlow.setToolTipText(
-                "Create a new named development flow.");
+    Composite row =
+            actionRow(
+                    parent,
+                    4);
 
-        newFlow.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    Button add =
+            actionButton(
+                    row,
+                    "+ File",
+                    "Add the current editor file to this flow.");
 
-                        createFlow();
-                    }
-                });
+    add.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-        Button rename =
-                new Button(
-                        row,
-                        SWT.PUSH);
+                    addCurrentFile();
+                }
+            });
 
-        rename.setText("Rename");
+    Button newFlow =
+            actionButton(
+                    row,
+                    "+ Flow",
+                    "Create a new named development flow.");
 
-        rename.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    newFlow.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-                        renameFlow();
-                    }
-                });
+                    createFlow();
+                }
+            });
 
-        Button delete =
-                new Button(
-                        row,
-                        SWT.PUSH);
+    Button rename =
+            actionButton(
+                    row,
+                    "Rename",
+                    "Rename the current flow.");
 
-        delete.setText("Delete");
+    rename.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-        delete.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+                    renameFlow();
+                }
+            });
 
-                        deleteFlow();
-                    }
-                });
+    Button delete =
+            actionButton(
+                    row,
+                    "Delete Flow",
+                    "Delete the current flow definition.");
 
-        Button openAll =
-                new Button(
-                        row,
-                        SWT.PUSH);
+    delete.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-        openAll.setText("Open All");
-        openAll.setToolTipText(
-                "Open every existing file in the current flow.");
+                    deleteFlow();
+                }
+            });
+}
 
-        openAll.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+private void createSecondaryActionsRow(
+        Composite parent) {
 
-                        openAllFiles();
-                    }
-                });
+    Composite row =
+            actionRow(
+                    parent,
+                    3);
 
-        Button focusTabs =
-                new Button(
-                        row,
-                        SWT.PUSH);
+    Button openAll =
+            actionButton(
+                    row,
+                    "Open All",
+                    "Open every existing file in the current flow.");
 
-        focusTabs.setText("Focus Tabs");
-        focusTabs.setToolTipText(
-                "Close workspace editors that are not in the current flow. Unsaved editors keep Eclipse's normal save prompt.");
+    openAll.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-        focusTabs.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+                    openAllFiles();
+                }
+            });
 
-                        focusEditorTabs();
-                    }
-                });
+    Button focusTabs =
+            actionButton(
+                    row,
+                    "Focus Tabs",
+                    "Close workspace editors that are not in the current flow. Unsaved editors keep Eclipse's normal save prompt.");
 
-        autoCaptureButton =
-                new Button(
-                        row,
-                        SWT.CHECK);
+    focusTabs.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-        autoCaptureButton.setText("Auto");
-        autoCaptureButton.setToolTipText(
-                "Automatically add workspace files when they are opened/activated.");
+                    focusEditorTabs();
+                }
+            });
 
-        autoCaptureButton.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    Button remove =
+            actionButton(
+                    row,
+                    "Remove File",
+                    "Remove the selected file from this flow. The project file is not deleted.");
 
-                        FlowExplorerService service =
-                                service();
+    remove.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
 
-                        if (service != null) {
-                            service.setAutoCapture(
-                                    autoCaptureButton
-                                            .getSelection());
-                        }
-                    }
-                });
+                    removeSelected();
+                }
+            });
+}
 
-        Button remove =
-                new Button(
-                        row,
-                        SWT.PUSH);
+private Composite actionRow(
+        Composite parent,
+        int columns) {
 
-        remove.setText("Remove");
-        remove.setToolTipText(
-                "Remove the selected file from this flow.");
+    Composite row =
+            new Composite(
+                    parent,
+                    SWT.NONE);
 
-        remove.addSelectionListener(
-                new SelectionAdapter() {
-                    @Override
-                    public void widgetSelected(
-                            SelectionEvent e) {
+    row.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.TOP,
+                    true,
+                    false));
 
-                        removeSelected();
-                    }
-                });
+    GridLayout layout =
+            new GridLayout(
+                    columns,
+                    true);
 
-        summaryLabel =
-                new Label(
-                        parent,
-                        SWT.NONE);
+    layout.marginWidth = 0;
+    layout.marginHeight = 0;
+    layout.horizontalSpacing = 4;
 
-        summaryLabel.setLayoutData(
-                new GridData(
-                        SWT.FILL,
-                        SWT.TOP,
-                        true,
-                        false));
-    }
+    row.setLayout(layout);
+
+    return row;
+}
+
+private Button actionButton(
+        Composite parent,
+        String text,
+        String toolTip) {
+
+    Button button =
+            new Button(
+                    parent,
+                    SWT.PUSH);
+
+    button.setText(text);
+    button.setToolTipText(toolTip);
+
+    button.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.CENTER,
+                    true,
+                    false));
+
+    return button;
+}
 
     private void createTree(
             Composite parent) {
@@ -328,6 +424,20 @@ public final class FlowExplorerView
 
         viewer.setLabelProvider(
                 new FlowLabelProvider());
+
+        viewer.getTree()
+                .addKeyListener(
+                        new KeyAdapter() {
+                            @Override
+                            public void keyPressed(
+                                    KeyEvent e) {
+
+                                if (e.keyCode == SWT.DEL) {
+                                    removeSelected();
+                                    e.doit = false;
+                                }
+                            }
+                        });
 
         viewer.addDoubleClickListener(
                 new IDoubleClickListener() {

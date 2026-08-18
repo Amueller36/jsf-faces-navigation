@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.10.3 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.12 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -9,6 +9,8 @@
 | Follow single-caller chain | `Ctrl+Shift+Alt+Page Up` | `Cmd+Shift+Option+Page Up` |
 | Follow single-callee chain | `Ctrl+Shift+Alt+Page Down` | `Cmd+Shift+Option+Page Down` |
 | JSF EL completion | `Ctrl+Alt+Space` | `Cmd+Option+Space` |
+| JSF component / attribute help | `Ctrl+Alt+H` | `Cmd+Option+H` |
+| Toggle XHTML comment | `Ctrl+/` | `Cmd+/` |
 | Open backing bean from XHTML | `Ctrl+Alt+B` | `Cmd+Option+B` |
 | Open XHTML pages using controller | `Ctrl+Alt+P` | `Cmd+Option+P` |
 | Find JSF references to `id`/`widgetVar` | `Ctrl+Alt+R` | `Cmd+Option+R` |
@@ -956,3 +958,216 @@ Deploy tab.
 
 `Ctrl+Alt+G` now opens the JSF Page / Controller Graph in a resizable,
 maximizable dialog instead of a fixed-size information popup.
+
+### Responsive Flow Explorer
+
+The Flow Explorer toolbar is split into multiple compact rows so all actions
+remain available when the view is docked narrowly.
+
+Select a file and press:
+
+`Delete`
+
+to remove it from the current Flow. This only removes the Flow entry; the
+workspace file itself is untouched.
+
+### v1.10.5 fixes
+
+**Smart XHTML sync:** `Ctrl+Alt+S` no longer opens the generic list of every WAR
+when Smart Deploy is enabled. The current XHTML/JS/CSS relative path is matched
+against deployed WARs first; only genuine ambiguous matches produce a chooser.
+
+**PrimeFaces autocomplete variables:** `p:autoComplete var="user"` is a local
+component variable, not a CDI/JSF bean. Diagnostics no longer report it as an
+unresolved bean. When `completeMethod` returns a typed collection such as
+`List<UserEntity>`, Ctrl+Click/completion/context info can resolve the local
+variable as `UserEntity`.
+
+**Log filter:** the Filter text box is always visible. `Ctrl+Shift+F` simply
+focuses it. `Esc` returns focus to the log without hiding the filter.
+
+**Safe log font zoom:** `A-`, `A+`, `A`, `Ctrl+-`, `Ctrl++`, `Ctrl+0` and
+`Ctrl+Mouse Wheel` update all log tabs using one replacement SWT Font. The old
+font is disposed only after every StyledText has switched to the new font.
+Ctrl+Mouse Wheel also cancels the widget's normal scrolling during zoom.
+
+---
+
+## XHTML / PrimeFaces / RichFaces completion
+
+The same shortcut used for EL completion is context-sensitive:
+
+`Ctrl+Alt+Space`
+
+### Component/tag completion
+
+Example:
+
+```xhtml
+<p:au|
+```
+
+Press `Ctrl+Alt+Space` and the plug-in offers matching PrimeFaces components,
+for example `autoComplete`.
+
+It supports the namespace prefixes declared in the XHTML file and common
+libraries including:
+
+- `p:` — PrimeFaces
+- `rich:` — RichFaces
+- `a4j:` — Ajax4jsf/RichFaces Ajax
+- `h:` — JSF HTML
+- `f:` — JSF Core
+- `ui:` — Facelets
+
+### Attribute completion
+
+Example:
+
+```xhtml
+<p:autoComplete co|>
+```
+
+`Ctrl+Alt+Space` offers attributes valid for that component, such as
+`completeMethod` or `converter`.
+
+Selecting an attribute inserts:
+
+```xhtml
+completeMethod=""
+```
+
+with the caret placed between the quotes.
+
+Attributes already present on the current tag are omitted from the list.
+
+### Version-aware metadata
+
+The plug-in scans Facelets tag-library metadata from likely JSF/PrimeFaces/
+RichFaces JARs on the current project's resolved Java classpath and caches the
+result in memory.
+
+That means an older enterprise project gets suggestions from its installed
+component-library version when metadata is available. Built-in definitions are
+used only as fallbacks for common tags/attributes.
+
+The existing behavior remains unchanged inside EL:
+
+```xhtml
+#{aumiAntragDetail.ver|}
+```
+
+`Ctrl+Alt+Space` still completes Java bean properties/methods there.
+
+---
+
+## JSF / PrimeFaces / RichFaces context help
+
+Put the caret on a component or attribute and press:
+
+`Ctrl+Alt+H`
+
+### Attribute help
+
+Example:
+
+```xhtml
+<p:autoComplete forceSelection="true" />
+                    ^
+```
+
+The help window shows:
+
+- library and component
+- attribute name
+- practical explanation
+- project taglib description when available
+- Java/type or method-signature metadata
+- whether the taglib marks the attribute required
+- whether the information came from project metadata or fallback help
+- a small usage example
+- related attributes from the same component
+
+Example output conceptually:
+
+```text
+PrimeFaces <p:autoComplete>
+Attribute: forceSelection
+
+What it does
+Restricts the value to an item selected from the suggestion list instead of
+accepting arbitrary free-form text.
+
+Type: boolean
+Required: no / not marked required
+Metadata: project taglib metadata
+
+Example
+<p:autoComplete forceSelection="true" />
+```
+
+The plug-in has curated explanations for common JSF/PrimeFaces/RichFaces
+attributes such as `process`, `execute`, `update`, `render`, `reRender`,
+`completeMethod`, `itemLabel`, `itemValue`, `converter`, `forceSelection`,
+`widgetVar`, `immediate`, `rowKey`, `selection`, `lazy`, `sortBy`, `filterBy`,
+and common Ajax callbacks.
+
+For attributes without a curated explanation, project taglib metadata is shown
+when available; otherwise the plug-in still provides structural/generic help
+and a generated example.
+
+### Component help
+
+Put the caret on the tag name:
+
+```xhtml
+<p:autoComplete ... />
+   ^
+```
+
+and press `Ctrl+Alt+H`.
+
+The window shows the component description from the project's taglib metadata,
+an example, and an attribute summary.
+
+The window is resizable/maximizable.
+
+---
+
+## XHTML comment shortcut
+
+In a Facelets/XHTML editor:
+
+`Ctrl+/`
+
+toggles an XML comment around the selected lines or the current line.
+
+Single line:
+
+```xhtml
+<p:panel />
+```
+
+becomes:
+
+```xhtml
+<!-- <p:panel /> -->
+```
+
+A multi-line selection becomes:
+
+```xhtml
+<!--
+<p:panel>
+    ...
+</p:panel>
+-->
+```
+
+Press `Ctrl+/` again to restore the original block.
+
+The command refuses to wrap a block that already contains an inner
+`<!-- ... -->` comment because XML comments cannot be nested.
+
+The binding is scoped to the Facelets/XHTML editor context, so Java keeps
+Eclipse/JDT's existing `Ctrl+/` behavior.

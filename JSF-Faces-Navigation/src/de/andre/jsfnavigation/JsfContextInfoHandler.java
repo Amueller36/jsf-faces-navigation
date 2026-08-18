@@ -120,6 +120,18 @@ public final class JsfContextInfoHandler
             }
         }
 
+        boolean localVariable = false;
+
+        if (type == null) {
+            type =
+                    JsfLocalVariableTypeResolver.resolve(
+                            file,
+                            beanName,
+                            file.getProject().getName());
+
+            localVariable = type != null;
+        }
+
         if (type == null) {
             return "Bean/Facelets variable '#{"
                     + beanName
@@ -135,6 +147,10 @@ public final class JsfContextInfoHandler
             out.append(" -> ")
                     .append(aliasTarget)
                     .append(" (ui:param)");
+        }
+
+        if (localVariable) {
+            out.append(" (local component variable)");
         }
 
         out.append("\n\nClass: ")

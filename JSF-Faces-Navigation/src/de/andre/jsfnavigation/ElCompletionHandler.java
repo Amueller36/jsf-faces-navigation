@@ -31,7 +31,8 @@ public final class ElCompletionHandler
         extends AbstractHandler {
 
     @Override
-    public Object execute(ExecutionEvent event)
+    public Object execute(
+            ExecutionEvent event)
             throws ExecutionException {
 
         ITextEditor editor =
@@ -45,7 +46,9 @@ public final class ElCompletionHandler
                 editor.getSelectionProvider()
                         .getSelection();
 
-        if (!(selection instanceof ITextSelection)) {
+        if (!(selection
+                instanceof ITextSelection)) {
+
             return null;
         }
 
@@ -63,11 +66,33 @@ public final class ElCompletionHandler
         }
 
         CompletionContext context =
-                context(document, offset);
+                context(
+                        document,
+                        offset);
 
-        if (context == null) {
+        if (context != null) {
+            completeEl(
+                    editor,
+                    document,
+                    offset,
+                    context);
+
             return null;
         }
+
+        completeMarkup(
+                editor,
+                document,
+                offset);
+
+        return null;
+    }
+
+    private static void completeEl(
+            ITextEditor editor,
+            IDocument document,
+            int offset,
+            CompletionContext context) {
 
         IFile file =
                 EditorContext.currentFile();
@@ -75,18 +100,22 @@ public final class ElCompletionHandler
         String project =
                 file == null
                         ? null
-                        : file.getProject().getName();
+                        : file.getProject()
+                                .getName();
 
         IType type =
                 ElJavaResolver.resolveBean(
                         context.beanName,
                         project);
 
-        if (type == null && file != null) {
+        if (type == null
+                && file != null) {
+
             String alias =
-                    JsfPageInspector.resolveUiParamAlias(
-                            file,
-                            context.beanName);
+                    JsfPageInspector
+                            .resolveUiParamAlias(
+                                    file,
+                                    context.beanName);
 
             if (alias != null) {
                 type =
@@ -96,8 +125,19 @@ public final class ElCompletionHandler
             }
         }
 
+        if (type == null
+                && file != null) {
+
+            type =
+                    JsfLocalVariableTypeResolver
+                            .resolve(
+                                    file,
+                                    context.beanName,
+                                    project);
+        }
+
         if (type == null) {
-            return null;
+            return;
         }
 
         try {
@@ -105,38 +145,46 @@ public final class ElCompletionHandler
                     context.resolvedProperties) {
 
                 JavaMemberTarget target =
-                        JavaPropertyResolver.resolve(
-                                type,
-                                property);
+                        JavaPropertyResolver
+                                .resolve(
+                                        type,
+                                        property);
 
                 if (target == null) {
-                    return null;
+                    return;
                 }
 
                 type =
-                        JavaReturnTypeResolver.resolve(
-                                type,
-                                target);
+                        JavaReturnTypeResolver
+                                .resolve(
+                                        type,
+                                        target);
 
                 if (type == null) {
-                    return null;
+                    return;
                 }
             }
 
             List<String> proposals =
                     proposals(type);
 
-            if (!context.prefix.isEmpty()) {
+            if (!context.prefix
+                    .isEmpty()) {
+
                 List<String> filtered =
                         new ArrayList<String>();
 
-                for (String proposal : proposals) {
-                    if (proposal.toLowerCase()
+                for (String proposal :
+                        proposals) {
+
+                    if (proposal
+                            .toLowerCase()
                             .startsWith(
                                     context.prefix
                                             .toLowerCase())) {
 
-                        filtered.add(proposal);
+                        filtered.add(
+                                proposal);
                     }
                 }
 
@@ -144,47 +192,141 @@ public final class ElCompletionHandler
             }
 
             String selected =
-                    choose(proposals);
+                    chooseEl(
+                            proposals);
 
             if (selected != null) {
                 document.replace(
                         context.prefixOffset,
                         context.prefix.length(),
                         selected);
+
+                editor.selectAndReveal(
+                        context.prefixOffset
+                                + selected.length(),
+                        0);
             }
 
         } catch (JavaModelException e) {
             // Keep completion non-disruptive if JDT is rebuilding.
+
         } catch (BadLocationException e) {
             // Document changed while the chooser was open.
         }
+    }
 
-        return null;
+    private static void completeMarkup(
+            ITextEditor editor,
+            IDocument document,
+            int offset) {
+
+        JsfMarkupCompletionContext context =
+                JsfMarkupCompletionContext
+                        .detect(
+                                document,
+                                offset);
+
+        if (context == null) {
+            return;
+        }
+
+        IFile file =
+                EditorContext.currentFile();
+
+        List<JsfComponentProposal> proposals;
+
+        if (context.getKind()
+                == JsfMarkupCompletionContext.TAG) {
+
+            proposals =
+                    JsfTaglibCatalogService
+                            .tagProposals(
+                                    file,
+                                    document,
+                                    context);
+
+        } else {
+            proposals =
+                    JsfTaglibCatalogService
+                            .attributeProposals(
+                                    file,
+                                    document,
+                                    context);
+        }
+
+        JsfComponentProposal selected =
+                chooseMarkup(
+                        proposals,
+                        context.getKind());
+
+        if (selected == null) {
+            return;
+        }
+
+        try {
+            document.replace(
+                    context.getReplaceOffset(),
+                    context.getReplaceLength(),
+                    selected.getInsertText());
+
+            int caret =
+                    context.getReplaceOffset()
+                    + selected.getInsertText()
+                            .length();
+
+            if (selected.isAttribute()
+                    && selected.getInsertText()
+                            .endsWith("=\"\"")) {
+
+                /*
+                 * Put the caret between the newly inserted quotes.
+                 */
+                caret--;
+            }
+
+            editor.selectAndReveal(
+                    caret,
+                    0);
+
+        } catch (BadLocationException e) {
+            // Document changed while the chooser was open.
+        }
     }
 
     private static CompletionContext context(
             IDocument document,
             int offset) {
 
-        String text = document.get();
+        String text =
+                document.get();
 
         int hash =
-                text.lastIndexOf("#{", offset);
+                text.lastIndexOf(
+                        "#{",
+                        offset);
 
         int dollar =
-                text.lastIndexOf("${", offset);
+                text.lastIndexOf(
+                        "${",
+                        offset);
 
         int start =
-                Math.max(hash, dollar);
+                Math.max(
+                        hash,
+                        dollar);
 
         if (start < 0) {
             return null;
         }
 
         int close =
-                text.indexOf('}', start + 2);
+                text.indexOf(
+                        '}',
+                        start + 2);
 
-        if (close >= 0 && close < offset) {
+        if (close >= 0
+                && close < offset) {
+
             return null;
         }
 
@@ -209,14 +351,18 @@ public final class ElCompletionHandler
         }
 
         String chain =
-                before.substring(0, dot);
+                before.substring(
+                        0,
+                        dot);
 
         String prefix =
-                before.substring(dot + 1);
+                before.substring(
+                        dot + 1);
 
         List<String> parts =
-                ElJavaResolver.splitSimpleChain(
-                        chain);
+                ElJavaResolver
+                        .splitSimpleChain(
+                                chain);
 
         if (parts.isEmpty()) {
             return null;
@@ -239,15 +385,21 @@ public final class ElCompletionHandler
         Map<String, String> unique =
                 new LinkedHashMap<String, String>();
 
-        collect(type, unique);
+        collect(
+                type,
+                unique);
 
         ITypeHierarchy hierarchy =
-                type.newSupertypeHierarchy(null);
+                type.newSupertypeHierarchy(
+                        null);
 
         for (IType superType :
-                hierarchy.getAllSupertypes(type)) {
+                hierarchy.getAllSupertypes(
+                        type)) {
 
-            collect(superType, unique);
+            collect(
+                    superType,
+                    unique);
         }
 
         List<String> result =
@@ -262,8 +414,9 @@ public final class ElCompletionHandler
                             String left,
                             String right) {
 
-                        return left.compareToIgnoreCase(
-                                right);
+                        return left
+                                .compareToIgnoreCase(
+                                        right);
                     }
                 });
 
@@ -281,18 +434,24 @@ public final class ElCompletionHandler
             String name =
                     method.getElementName();
 
-            if (method.getNumberOfParameters() == 0
+            if (method.getNumberOfParameters()
+                    == 0
                     && name.startsWith("get")
                     && name.length() > 3
-                    && !"getClass".equals(name)) {
+                    && !"getClass".equals(
+                            name)) {
 
                 String property =
                         decapitalize(
                                 name.substring(3));
 
-                unique.put(property, property);
+                unique.put(
+                        property,
+                        property);
 
-            } else if (method.getNumberOfParameters() == 0
+            } else if (method
+                    .getNumberOfParameters()
+                    == 0
                     && name.startsWith("is")
                     && name.length() > 2) {
 
@@ -300,7 +459,9 @@ public final class ElCompletionHandler
                         decapitalize(
                                 name.substring(2));
 
-                unique.put(property, property);
+                unique.put(
+                        property,
+                        property);
 
             } else {
                 unique.put(
@@ -335,7 +496,7 @@ public final class ElCompletionHandler
                 + value.substring(1);
     }
 
-    private static String choose(
+    private static String chooseEl(
             final List<String> proposals) {
 
         if (proposals == null
@@ -357,8 +518,10 @@ public final class ElCompletionHandler
                         new Runnable() {
                             @Override
                             public void run() {
+
                                 Shell shell =
-                                        PlatformUI.getWorkbench()
+                                        PlatformUI
+                                                .getWorkbench()
                                                 .getActiveWorkbenchWindow()
                                                 .getShell();
 
@@ -389,7 +552,80 @@ public final class ElCompletionHandler
         return selected[0];
     }
 
+    private static JsfComponentProposal chooseMarkup(
+            final List<JsfComponentProposal> proposals,
+            final int kind) {
+
+        if (proposals == null
+                || proposals.isEmpty()) {
+
+            return null;
+        }
+
+        if (proposals.size() == 1) {
+            return proposals.get(0);
+        }
+
+        final JsfComponentProposal[] selected =
+                new JsfComponentProposal[1];
+
+        PlatformUI.getWorkbench()
+                .getDisplay()
+                .syncExec(
+                        new Runnable() {
+                            @Override
+                            public void run() {
+
+                                Shell shell =
+                                        PlatformUI
+                                                .getWorkbench()
+                                                .getActiveWorkbenchWindow()
+                                                .getShell();
+
+                                ElementListSelectionDialog dialog =
+                                        new ElementListSelectionDialog(
+                                                shell,
+                                                new LabelProvider() {
+                                                    @Override
+                                                    public String getText(
+                                                            Object element) {
+
+                                                        return ((JsfComponentProposal)
+                                                                element)
+                                                                .displayText();
+                                                    }
+                                                });
+
+                                dialog.setTitle(
+                                        kind
+                                                == JsfMarkupCompletionContext.TAG
+                                                        ? "JSF / PrimeFaces Component Completion"
+                                                        : "JSF / PrimeFaces Attribute Completion");
+
+                                dialog.setMessage(
+                                        kind
+                                                == JsfMarkupCompletionContext.TAG
+                                                        ? "Select a component/tag:"
+                                                        : "Select an attribute:");
+
+                                dialog.setElements(
+                                        proposals.toArray());
+
+                                if (dialog.open()
+                                        == Window.OK) {
+
+                                    selected[0] =
+                                            (JsfComponentProposal)
+                                                    dialog.getFirstResult();
+                                }
+                            }
+                        });
+
+        return selected[0];
+    }
+
     private static final class CompletionContext {
+
         final String beanName;
         final List<String> resolvedProperties;
         final String prefix;
@@ -402,7 +638,8 @@ public final class ElCompletionHandler
                 int prefixOffset) {
 
             this.beanName = beanName;
-            this.resolvedProperties = resolvedProperties;
+            this.resolvedProperties =
+                    resolvedProperties;
             this.prefix = prefix;
             this.prefixOffset = prefixOffset;
         }

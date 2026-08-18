@@ -45,8 +45,15 @@ public final class SyncCurrentWebResourceHandler
             return null;
         }
 
-        if (WebSphereDeploymentChooser.ensureConfiguredRoot()
-                == null) {
+        /*
+         * Smart Deploy resolves the actual WAR from the current resource's
+         * relative web path. Do not run the legacy "choose any WAR" dialog
+         * first, otherwise Ctrl+Alt+S asks from every deployed application
+         * before smart matching ever gets a chance to run.
+         */
+        if (!SmartDeploySettings.isEnabled()
+                && WebSphereDeploymentChooser.ensureConfiguredRoot()
+                        == null) {
 
             showError(
                     "No deployed web-module root could be found. "

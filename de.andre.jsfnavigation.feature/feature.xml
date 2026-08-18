@@ -2,18 +2,18 @@
 <feature
       id="de.andre.jsfnavigation.feature"
       label="JSF EL Navigation"
-      version="1.10.3"
+      version="1.12.0"
       provider-name="Andre">
 
    <description>
-      PrimeFaces/RichFaces navigation, persistent Flow Explorer, JPQL/caller navigation, smart multi-EAR WebSphere deploy and searchable clickable server logs.
+      PrimeFaces/RichFaces navigation, XHTML completion and context help, persistent Flow Explorer, JPQL/caller navigation, smart WebSphere deploy and searchable server logs.
    </description>
 
    <plugin
          id="de.andre.jsfnavigation"
          download-size="0"
          install-size="0"
-         version="1.10.3"
+         version="1.12.0"
          unpack="false"/>
 
 </feature>

@@ -92,9 +92,9 @@
       <command
             categoryId="de.andre.jsfnavigation.commands.category"
             defaultHandler="de.andre.jsfnavigation.ElCompletionHandler"
-            description="Complete a JSF EL property or method after a bean/property dot."
+            description="Complete JSF EL members, XHTML component tags and PrimeFaces/RichFaces/JSF attributes."
             id="de.andre.jsfnavigation.command.elComplete"
-            name="JSF EL Complete">
+            name="JSF / XHTML Complete">
       </command>
       <command
             categoryId="de.andre.jsfnavigation.commands.category"
@@ -172,6 +172,20 @@
             description="Open or close the live WebSphere SystemOut/SystemErr log view."
             id="de.andre.jsfnavigation.command.toggleWebSphereLogs"
             name="Toggle WebSphere Logs">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.JsfComponentHelpHandler"
+            description="Show version-aware help, type information and examples for the JSF/PrimeFaces/RichFaces tag or attribute at the caret."
+            id="de.andre.jsfnavigation.command.componentHelp"
+            name="JSF Component / Attribute Help">
+      </command>
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.ToggleXhtmlCommentHandler"
+            description="Toggle an XML/XHTML comment around the selected lines or current line."
+            id="de.andre.jsfnavigation.command.toggleXhtmlComment"
+            name="Toggle XHTML Comment">
       </command>
    </extension>
 
@@ -275,6 +289,18 @@
             contextId="org.eclipse.ui.contexts.window"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M3+L">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.componentHelp"
+            contextId="jsf.facelet.source.EditorContext"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+H">
+      </key>
+      <key
+            commandId="de.andre.jsfnavigation.command.toggleXhtmlComment"
+            contextId="jsf.facelet.source.EditorContext"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+/">
       </key>
    </extension>
 

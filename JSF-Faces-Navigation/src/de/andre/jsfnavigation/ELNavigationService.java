@@ -80,6 +80,18 @@ public final class ELNavigationService {
             }
 
             if (currentType == null) {
+                org.eclipse.core.resources.IFile currentFile =
+                        EditorContext.currentFile();
+
+                currentType =
+                        JsfLocalVariableTypeResolver.resolve(
+                                currentFile,
+                                rootName,
+                                selection
+                                        .getPreferredProjectName());
+            }
+
+            if (currentType == null) {
                 return;
             }
 

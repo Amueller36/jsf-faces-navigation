@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
    <feature
-         url="features/de.andre.jsfnavigation.feature_1.10.3.jar"
+         url="features/de.andre.jsfnavigation.feature_1.12.0.jar"
          id="de.andre.jsfnavigation.feature"
-         version="1.10.3">
+         version="1.12.0">
       <category name="jsf-navigation"/>
    </feature>
 

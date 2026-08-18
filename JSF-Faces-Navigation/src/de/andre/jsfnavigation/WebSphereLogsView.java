@@ -21,7 +21,6 @@ import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseMoveListener;
-import org.eclipse.swt.events.MouseWheelListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Font;
@@ -31,7 +30,9 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.ProgressBar;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.swt.widgets.Text;
@@ -499,9 +500,9 @@ public final class WebSphereLogsView
                         true,
                         false);
 
-        data.exclude = true;
+        data.exclude = false;
         filterRow.setLayoutData(data);
-        filterRow.setVisible(false);
+        filterRow.setVisible(true);
 
         GridLayout layout =
                 new GridLayout(4, false);
@@ -549,7 +550,7 @@ public final class WebSphereLogsView
                             KeyEvent e) {
 
                         if (e.keyCode == SWT.ESC) {
-                            hideFilter();
+                            activeLogText().setFocus();
                             e.doit = false;
                         }
                     }
@@ -576,7 +577,7 @@ public final class WebSphereLogsView
                             SelectionEvent e) {
 
                         filterField.setText("");
-                        hideFilter();
+                        filterField.setFocus();
                     }
                 });
     }
@@ -685,19 +686,29 @@ public final class WebSphereLogsView
                     });
         }
 
-        text.addMouseWheelListener(
-                new MouseWheelListener() {
+        text.addListener(
+                SWT.MouseWheel,
+                new Listener() {
                     @Override
-                    public void mouseScrolled(
-                            MouseEvent e) {
+                    public void handleEvent(
+                            Event event) {
 
-                        if ((e.stateMask
+                        if ((event.stateMask
                                 & SWT.MOD1) != 0) {
 
+                            /*
+                             * Use the low-level SWT event because Event.doit
+                             * can cancel the widget's normal wheel scrolling.
+                             * The old MouseWheelListener zoomed AND scrolled
+                             * at the same time on Windows, which could leave
+                             * StyledText rendering in a broken-looking state.
+                             */
                             changeLogFont(
-                                    e.count > 0
+                                    event.count > 0
                                             ? 1
                                             : -1);
+
+                            event.doit = false;
 
                         } else {
                             text.getDisplay()
@@ -1056,35 +1067,21 @@ public final class WebSphereLogsView
 
 
     private void showFilter() {
-        GridData data =
-                (GridData)
-                        filterRow.getLayoutData();
+        if (filterField == null
+                || filterField.isDisposed()) {
 
-        data.exclude = false;
-        filterRow.setVisible(true);
-
-        filterRow.getParent()
-                .layout(
-                        true,
-                        true);
+            return;
+        }
 
         filterField.setFocus();
         filterField.selectAll();
     }
 
     private void hideFilter() {
-        GridData data =
-                (GridData)
-                        filterRow.getLayoutData();
-
-        data.exclude = true;
-        filterRow.setVisible(false);
-
-        filterRow.getParent()
-                .layout(
-                        true,
-                        true);
-
+        /*
+         * The filter row is intentionally permanent from 1.10.5 onward.
+         * Keep this method as a focus helper for old call sites/shortcuts.
+         */
         activeLogText().setFocus();
     }
 
@@ -1408,16 +1405,92 @@ public final class WebSphereLogsView
     }
 
     private void recreateLogFont() {
-        if (logFont != null
-                && !logFont.isDisposed()) {
+        StyledText[] texts =
+                new StyledText[] {
+                        systemOutText,
+                        systemErrText,
+                        deployText
+                };
 
-            logFont.dispose();
-            logFont = null;
+        org.eclipse.swt.widgets.Display display = null;
+
+        for (StyledText text : texts) {
+            if (text != null
+                    && !text.isDisposed()) {
+
+                display = text.getDisplay();
+                break;
+            }
         }
 
-        applyLogFont(systemOutText);
-        applyLogFont(systemErrText);
-        applyLogFont(deployText);
+        if (display == null
+                || display.isDisposed()) {
+
+            return;
+        }
+
+        Font baseFont =
+                JFaceResources.getTextFont();
+
+        FontData[] data =
+                baseFont.getFontData();
+
+        for (FontData fontData : data) {
+            fontData.setHeight(
+                    Math.max(
+                            6,
+                            fontData.getHeight()
+                                    + logFontDelta));
+        }
+
+        Font replacement =
+                new Font(
+                        display,
+                        data);
+
+        Font old = logFont;
+        logFont = replacement;
+
+        try {
+            for (StyledText text : texts) {
+                if (text != null
+                        && !text.isDisposed()) {
+
+                    text.setRedraw(false);
+                }
+            }
+
+            for (StyledText text : texts) {
+                if (text != null
+                        && !text.isDisposed()) {
+
+                    text.setFont(replacement);
+                    LogSyntaxHighlighter.apply(text);
+                }
+            }
+
+        } finally {
+            for (StyledText text : texts) {
+                if (text != null
+                        && !text.isDisposed()) {
+
+                    text.setRedraw(true);
+                    text.redraw();
+                }
+            }
+
+            /*
+             * Dispose only after every StyledText stopped referencing the old
+             * Font. Disposing it first was unsafe on SWT/Windows and was the
+             * main cause of corrupted-looking text after repeated zooming.
+             */
+            if (old != null
+                    && old != replacement
+                    && !old.isDisposed()) {
+
+                old.dispose();
+            }
+        }
     }
 
     private void requestRefresh() {

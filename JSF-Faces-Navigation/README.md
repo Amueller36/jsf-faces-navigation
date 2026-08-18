@@ -1,4 +1,35 @@
-# JSF EL Navigation 1.10.3
+# JSF EL Navigation 1.12.0
+
+Version 1.12 adds context help for PrimeFaces/RichFaces/JSF components and
+attributes plus an XHTML-aware `Ctrl+/` toggle-comment command.
+
+`Ctrl+Alt+H` opens a resizable help window for the tag/attribute at the caret.
+The help combines the project's own taglib metadata (type, required flag and
+library description where available) with practical explanations and generated
+usage examples.
+
+`Ctrl+/` is scoped to the Facelets/XHTML editor context and toggles XML comments
+for the selected lines/current line without stealing the Java editor's comment
+shortcut.
+
+Version 1.11 adds XHTML component and attribute completion to the existing
+`Ctrl+Alt+Space` command. It completes PrimeFaces, RichFaces/A4J, standard JSF
+`h:`/`f:`, and Facelets `ui:` tags. Where available, the plug-in reads the
+actual Facelets tag-library metadata from the project's installed JARs, so the
+suggestions follow the PrimeFaces/RichFaces version used by the project rather
+than assuming a current library version.
+
+Version 1.10.5 fixes smart XHTML manual sync, PrimeFaces autocomplete local
+variables, and log-view zoom/filter behavior. Ctrl+Alt+S now lets the smart WAR
+resolver run before any legacy deployment chooser. `p:autoComplete var` values
+are treated as local variables and their type is inferred from `completeMethod`
+when possible. The log filter row is permanently visible, and font zoom now
+replaces SWT fonts safely without disposing a font still used by StyledText.
+
+Version 1.10.4 makes the JSF Flow Explorer responsive when docked in a
+narrow Eclipse view. Flow selection, automatic capture and actions are split
+across compact rows so buttons no longer disappear off the right edge. The
+selected Flow entry can also be removed with the `Delete` key.
 
 Version 1.10.3 improves the WebSphere Logs view with line filtering, font zoom
 controls and scroll-aware auto-scroll. Scrolling upward pauses auto-follow so

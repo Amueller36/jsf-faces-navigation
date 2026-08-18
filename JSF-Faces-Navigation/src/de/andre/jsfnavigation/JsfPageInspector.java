@@ -21,7 +21,7 @@ public final class JsfPageInspector {
 
     private static final Pattern LOCAL_VAR =
             Pattern.compile(
-                    "<\\s*(?:ui:param|c:set|ui:repeat|a4j:repeat|h:dataTable|p:dataTable|rich:dataTable|f:selectItems)\\b[^>]*\\b(?:name|var)\\s*=\\s*(['\"])([A-Za-z_$][A-Za-z0-9_$]*)\\1",
+                    "<\\s*(?:ui:param|c:set|ui:repeat|a4j:repeat|h:dataTable|p:dataTable|rich:dataTable|f:selectItems|p:autoComplete)\\b[^>]*\\b(?:name|var)\\s*=\\s*(['\"])([A-Za-z_$][A-Za-z0-9_$]*)\\1",
                     Pattern.DOTALL);
 
     private static final Pattern UI_PARAM_ALIAS =
