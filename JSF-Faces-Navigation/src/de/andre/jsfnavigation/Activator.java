@@ -44,7 +44,7 @@ public final class Activator extends AbstractUIPlugin {
                 .toFile();
 
         File jsfViewIndexFile = getStateLocation()
-                .append("jsf-view-index-v1.bin")
+                .append("jsf-view-index-v2.bin")
                 .toFile();
 
         File flowStateFile = getStateLocation()

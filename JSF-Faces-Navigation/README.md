@@ -1,4 +1,11 @@
-# JSF EL Navigation 1.12.0
+# JSF EL Navigation 1.12.1
+
+Version 1.12.1 fixes the two new XHTML hotkeys for the actual WTP HTML/Facelets
+`StructuredTextEditor` context and corrects comma-separated JSF/PrimeFaces
+component-reference parsing such as `process=":form,@form,panel"`.
+
+The JSF view-symbol cache was bumped to v2 so stale component-reference warnings
+created by the old tokenizer are discarded automatically after upgrading.
 
 Version 1.12 adds context help for PrimeFaces/RichFaces/JSF components and
 attributes plus an XHTML-aware `Ctrl+/` toggle-comment command.

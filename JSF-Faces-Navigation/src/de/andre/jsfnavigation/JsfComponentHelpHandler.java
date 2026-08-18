@@ -77,12 +77,23 @@ public final class JsfComponentHelpHandler
                     protected IStatus run(
                             IProgressMonitor monitor) {
 
-                        final JsfComponentHelp help =
-                                JsfTaglibCatalogService
-                                        .help(
-                                                file,
-                                                document,
-                                                context);
+                        final JsfComponentHelp help;
+
+                        try {
+                            help =
+                                    JsfTaglibCatalogService
+                                            .help(
+                                                    file,
+                                                    document,
+                                                    context);
+
+                        } catch (RuntimeException e) {
+                            WebSphereStatusLine.show(
+                                    "JSF component help failed: "
+                                    + safeMessage(e));
+
+                            return Status.OK_STATUS;
+                        }
 
                         if (help == null) {
                             WebSphereStatusLine.show(
@@ -134,4 +145,23 @@ public final class JsfComponentHelpHandler
 
         return null;
     }
+
+    private static String safeMessage(
+            Throwable error) {
+
+        if (error == null) {
+            return "unknown error";
+        }
+
+        String message =
+                error.getMessage();
+
+        return message == null
+                || message.trim().isEmpty()
+                        ? error.getClass()
+                                .getSimpleName()
+                        : message;
+    }
+
+
 }

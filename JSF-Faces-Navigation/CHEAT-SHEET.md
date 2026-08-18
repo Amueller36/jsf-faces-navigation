@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.12 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.12.1 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -1171,3 +1171,39 @@ The command refuses to wrap a block that already contains an inner
 
 The binding is scoped to the Facelets/XHTML editor context, so Java keeps
 Eclipse/JDT's existing `Ctrl+/` behavior.
+
+---
+
+## 1.12.1 fixes
+
+The XHTML-only shortcuts are bound to the WTP HTML source-editor context shown
+by Eclipse Plug-in Selection Spy:
+
+`org.eclipse.wst.html.core.htmlsource.source.EditorContext`
+
+So in the normal Facelets/XHTML `StructuredTextEditor`:
+
+- `Ctrl+Alt+H` opens component/attribute help.
+- `Ctrl+/` toggles an XHTML/XML comment.
+
+Component-reference diagnostics now split both whitespace and commas. For
+example:
+
+```xhtml
+process=":antragForm,@form,noValidation"
+```
+
+is interpreted as three separate expressions:
+
+```text
+:antragForm
+@form
+noValidation
+```
+
+`@form` is treated as a PrimeFaces/JSF search expression and is not validated as
+a component ID. The ordinary component IDs are validated independently.
+
+The JSF view-symbol persistent cache is automatically rebuilt once after the
+upgrade so an old combined warning such as
+`antragForm,@form,noValidation` cannot remain cached.

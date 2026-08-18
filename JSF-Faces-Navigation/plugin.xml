@@ -292,13 +292,13 @@
       </key>
       <key
             commandId="de.andre.jsfnavigation.command.componentHelp"
-            contextId="jsf.facelet.source.EditorContext"
+            contextId="org.eclipse.wst.html.core.htmlsource.source.EditorContext"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+M3+H">
       </key>
       <key
             commandId="de.andre.jsfnavigation.command.toggleXhtmlComment"
-            contextId="jsf.facelet.source.EditorContext"
+            contextId="org.eclipse.wst.html.core.htmlsource.source.EditorContext"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+/">
       </key>

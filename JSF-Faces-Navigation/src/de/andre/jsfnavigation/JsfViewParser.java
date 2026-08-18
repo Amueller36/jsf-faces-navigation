@@ -287,7 +287,7 @@ public final class JsfViewParser {
 
         while (i < value.length()) {
             while (i < value.length()
-                    && Character.isWhitespace(
+                    && isReferenceSeparator(
                             value.charAt(i))) {
                 i++;
             }
@@ -295,7 +295,7 @@ public final class JsfViewParser {
             int start = i;
 
             while (i < value.length()
-                    && !Character.isWhitespace(
+                    && !isReferenceSeparator(
                             value.charAt(i))) {
                 i++;
             }
@@ -333,6 +333,18 @@ public final class JsfViewParser {
                     token,
                     stamp));
         }
+    }
+
+    private static boolean isReferenceSeparator(
+            char c) {
+
+        /*
+         * PrimeFaces/RichFaces search expressions are commonly written as
+         * either whitespace-separated or comma-separated lists, e.g.
+         * process=":form,@form,panel".
+         */
+        return Character.isWhitespace(c)
+                || c == ',';
     }
 
     public static String normalizeClientId(String value) {
