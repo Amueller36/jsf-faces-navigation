@@ -60,7 +60,7 @@ public final class WebSphereHotSyncPreferencePage
         DirectoryFieldEditor deployedRoot =
                 new DirectoryFieldEditor(
                         WebSphereHotSyncSettings.DEPLOYED_WEB_ROOT,
-                        "Deployed web module root (recommended):",
+                        "Deployed web module root (optional override):",
                         getFieldEditorParent());
 
         deployedRoot.setEmptyStringAllowed(true);
@@ -123,8 +123,8 @@ public final class WebSphereHotSyncPreferencePage
                 "Forget learned Smart Deploy mappings");
 
         clearMappings.setToolTipText(
-                "Clears remembered Eclipse output-folder -> deployed module mappings. "
-                + "The plug-in will rediscover and ask again on the next matching build.");
+                "Clears remembered Java output-folder and web source-root -> deployed module mappings. "
+                + "The plug-in will rediscover and ask again on the next matching build/save.");
 
         clearMappings.addSelectionListener(
                 new SelectionAdapter() {

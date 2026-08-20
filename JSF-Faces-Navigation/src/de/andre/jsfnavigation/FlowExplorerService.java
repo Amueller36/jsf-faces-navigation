@@ -20,11 +20,13 @@ import java.util.Map;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.Signature;
 
 public final class FlowExplorerService {
 
     private static final int MAGIC = 0x464C4F57; // FLOW
-    private static final int FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 4;
 
     private final File stateFile;
     private final Map<String, FlowDefinition> flows =
@@ -32,6 +34,7 @@ public final class FlowExplorerService {
 
     private String currentFlowName;
     private boolean autoCapture = true;
+    private boolean autoTestDiscovery = true;
 
     public FlowExplorerService(File stateFile) {
         this.stateFile = stateFile;
@@ -58,6 +61,53 @@ public final class FlowExplorerService {
             currentFlowName =
                     flows.keySet().iterator().next();
         }
+
+        if (reclassifyExistingEntries()) {
+            persist();
+        }
+    }
+
+    private boolean reclassifyExistingEntries() {
+        boolean changed = false;
+
+        for (FlowDefinition flow :
+                flows.values()) {
+
+            List<FlowEntry> snapshot =
+                    new ArrayList<FlowEntry>(
+                            flow.getEntries());
+
+            for (FlowEntry entry :
+                    snapshot) {
+
+                IFile file =
+                        resolve(entry);
+
+                if (file == null) {
+                    continue;
+                }
+
+                String category =
+                        FlowCategoryClassifier
+                                .classify(file);
+
+                if (!category.equals(
+                        entry.getCategory())) {
+
+                    flow.addOrReplace(
+                            new FlowEntry(
+                                    entry.getResourcePath(),
+                                    category,
+                                    entry.getAddedAt(),
+                                    entry.getImpactDepth(),
+                                    entry.getImpactOrigins()));
+
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
     }
 
     public synchronized void stop() {
@@ -220,6 +270,155 @@ public final class FlowExplorerService {
         persist();
     }
 
+    public synchronized void addImpactedTest(
+            IFile file,
+            IMethod changedMethod,
+            int callerDepth) {
+
+        if (file == null
+                || !file.exists()
+                || changedMethod == null
+                || !changedMethod.exists()) {
+
+            return;
+        }
+
+        IFile sourceFile =
+                changedMethod.getResource()
+                        instanceof IFile
+                        ? (IFile)
+                                changedMethod.getResource()
+                        : null;
+
+        if (sourceFile == null
+                || !sourceFile.exists()) {
+
+            return;
+        }
+
+        FlowDefinition flow =
+                getCurrentFlow();
+
+        if (flow == null) {
+            return;
+        }
+
+        String resourcePath =
+                file.getFullPath()
+                        .toPortableString();
+
+        FlowEntry existing = null;
+
+        for (FlowEntry entry :
+                flow.getEntries()) {
+
+            if (resourcePath.equals(
+                    entry.getResourcePath())) {
+
+                existing = entry;
+                break;
+            }
+        }
+
+        List<FlowImpactOrigin> origins =
+                new ArrayList<FlowImpactOrigin>();
+
+        int legacyDepth = 0;
+        long addedAt =
+                System.currentTimeMillis();
+
+        if (existing != null) {
+            origins.addAll(
+                    existing.getImpactOrigins());
+            legacyDepth =
+                    existing.getImpactDepth();
+            addedAt =
+                    existing.getAddedAt();
+        }
+
+        FlowImpactOrigin candidate =
+                new FlowImpactOrigin(
+                        sourceFile.getFullPath()
+                                .toPortableString(),
+                        changedMethod
+                                .getHandleIdentifier(),
+                        methodLabel(
+                                changedMethod),
+                        callerDepth);
+
+        boolean matched = false;
+
+        for (int i = 0;
+                i < origins.size();
+                i++) {
+
+            FlowImpactOrigin current =
+                    origins.get(i);
+
+            if (!current.getIdentity()
+                    .equals(
+                            candidate.getIdentity())) {
+
+                continue;
+            }
+
+            origins.set(
+                    i,
+                    new FlowImpactOrigin(
+                            candidate.getSourceResourcePath(),
+                            candidate.getMethodHandleIdentifier(),
+                            candidate.getMethodLabel(),
+                            Math.min(
+                                    current.getDepth(),
+                                    candidate.getDepth())));
+
+            matched = true;
+            break;
+        }
+
+        if (!matched) {
+            origins.add(candidate);
+        }
+
+        flow.addOrReplace(
+                new FlowEntry(
+                        resourcePath,
+                        FlowCategoryClassifier.TEST,
+                        addedAt,
+                        legacyDepth,
+                        origins));
+
+        persist();
+    }
+
+    private static String methodLabel(
+            IMethod method) {
+
+        StringBuilder label =
+                new StringBuilder(
+                        method.getElementName())
+                        .append('(');
+
+        String[] parameters =
+                method.getParameterTypes();
+
+        for (int i = 0;
+                i < parameters.length;
+                i++) {
+
+            if (i > 0) {
+                label.append(", ");
+            }
+
+            label.append(
+                    Signature.toString(
+                            parameters[i]));
+        }
+
+        return label.append(')')
+                .toString();
+    }
+
     public synchronized void removeFile(
             String resourcePath) {
 
@@ -255,6 +454,33 @@ public final class FlowExplorerService {
         persist();
     }
 
+    public synchronized boolean isAutoTestDiscovery() {
+        return autoTestDiscovery;
+    }
+
+    public synchronized void setAutoTestDiscovery(
+            boolean enabled) {
+
+        autoTestDiscovery = enabled;
+        persist();
+    }
+
+    public synchronized boolean containsFile(
+            IFile file) {
+
+        if (file == null) {
+            return false;
+        }
+
+        FlowDefinition flow =
+                getCurrentFlow();
+
+        return flow != null
+                && flow.contains(
+                        file.getFullPath()
+                                .toPortableString());
+    }
+
     public synchronized List<FlowEntry> entriesForCategory(
             String category) {
 
@@ -277,6 +503,20 @@ public final class FlowExplorerService {
                 result.add(entry);
             }
         }
+
+        Collections.sort(
+                result,
+                new java.util.Comparator<FlowEntry>() {
+                    @Override
+                    public int compare(
+                            FlowEntry left,
+                            FlowEntry right) {
+
+                        return left.getResourcePath()
+                                .compareToIgnoreCase(
+                                        right.getResourcePath());
+                    }
+                });
 
         return result;
     }
@@ -312,9 +552,17 @@ public final class FlowExplorerService {
                                     new FileInputStream(
                                             stateFile)));
 
-            if (in.readInt() != MAGIC
-                    || in.readInt()
-                            != FORMAT_VERSION) {
+            if (in.readInt() != MAGIC) {
+                return;
+            }
+
+            int version =
+                    in.readInt();
+
+            if (version != 1
+                    && version != 2
+                    && version != 3
+                    && version != FORMAT_VERSION) {
 
                 return;
             }
@@ -324,6 +572,11 @@ public final class FlowExplorerService {
 
             autoCapture =
                     in.readBoolean();
+
+            autoTestDiscovery =
+                    version >= 2
+                            ? in.readBoolean()
+                            : true;
 
             int flowCount =
                     in.readInt();
@@ -345,11 +598,47 @@ public final class FlowExplorerService {
                         j < entryCount;
                         j++) {
 
+                    String resourcePath =
+                            in.readUTF();
+
+                    String category =
+                            in.readUTF();
+
+                    long addedAt =
+                            in.readLong();
+
+                    int impactDepth =
+                            version >= 3
+                                    ? in.readInt()
+                                    : 0;
+
+                    List<FlowImpactOrigin> origins =
+                            new ArrayList<FlowImpactOrigin>();
+
+                    if (version >= 4) {
+                        int originCount =
+                                in.readInt();
+
+                        for (int k = 0;
+                                k < originCount;
+                                k++) {
+
+                            origins.add(
+                                    new FlowImpactOrigin(
+                                            in.readUTF(),
+                                            in.readUTF(),
+                                            in.readUTF(),
+                                            in.readInt()));
+                        }
+                    }
+
                     flow.addOrReplace(
                             new FlowEntry(
-                                    in.readUTF(),
-                                    in.readUTF(),
-                                    in.readLong()));
+                                    resourcePath,
+                                    category,
+                                    addedAt,
+                                    impactDepth,
+                                    origins));
                 }
 
                 flows.put(name, flow);
@@ -403,6 +692,8 @@ public final class FlowExplorerService {
                     currentFlowName);
 
             out.writeBoolean(autoCapture);
+            out.writeBoolean(
+                    autoTestDiscovery);
             out.writeInt(flows.size());
 
             for (FlowDefinition flow :
@@ -423,6 +714,26 @@ public final class FlowExplorerService {
 
                     out.writeLong(
                             entry.getAddedAt());
+
+                    out.writeInt(
+                            entry.getImpactDepth());
+
+                    out.writeInt(
+                            entry.getImpactOrigins()
+                                    .size());
+
+                    for (FlowImpactOrigin origin :
+                            entry.getImpactOrigins()) {
+
+                        out.writeUTF(
+                                origin.getSourceResourcePath());
+                        out.writeUTF(
+                                origin.getMethodHandleIdentifier());
+                        out.writeUTF(
+                                origin.getMethodLabel());
+                        out.writeInt(
+                                origin.getDepth());
+                    }
                 }
             }
 

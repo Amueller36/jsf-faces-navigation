@@ -80,9 +80,17 @@ public final class WebSphereHotSyncService {
                 WebSphereHotSyncPaths.resolveTarget(source);
 
         if (target == null) {
+            org.eclipse.core.runtime.IPath relative =
+                    WebSphereHotSyncPaths.relativeWebPath(source);
+
             throw new IOException(
-                    "No deployed WebSphere web-module root is configured. "
-                    + "Open Preferences > JSF / Java Navigation > WebSphere Hot Sync.");
+                    "Could not resolve a deployed WAR for "
+                    + (relative == null
+                            ? source.getName()
+                            : relative.toPortableString())
+                    + ". Configure the WebSphere profile directory, or set "
+                    + "Deployed web module root as an explicit override under "
+                    + "Preferences > JSF / Java Navigation > WebSphere Hot Sync.");
         }
 
         File parent =

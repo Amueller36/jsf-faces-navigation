@@ -18,8 +18,10 @@ public final class Activator extends AbstractUIPlugin {
     private WebSphereHotSyncService webSphereHotSyncService;
     private FlowExplorerService flowExplorerService;
     private FlowExplorerWorkbenchListener flowWorkbenchListener;
+    private FlowTestImpactService flowTestImpactService;
     private SmartDeployMappingStore smartDeployMappingStore;
     private SmartDeployService smartDeployService;
+    private WtpShortcutBridge wtpShortcutBridge;
 
     @Override
     public void start(BundleContext context) throws Exception {
@@ -67,6 +69,9 @@ public final class Activator extends AbstractUIPlugin {
         jsfDiagnosticsService = new JsfDiagnosticsService();
         jsfDiagnosticsService.start();
 
+        wtpShortcutBridge = new WtpShortcutBridge();
+        wtpShortcutBridge.start();
+
         webSphereHotSyncService = new WebSphereHotSyncService();
         webSphereHotSyncService.start();
 
@@ -83,6 +88,10 @@ public final class Activator extends AbstractUIPlugin {
         flowExplorerService = new FlowExplorerService(flowStateFile);
         flowExplorerService.start();
 
+        flowTestImpactService =
+                new FlowTestImpactService();
+        flowTestImpactService.start();
+
         if (PlatformUI.isWorkbenchRunning()) {
             flowWorkbenchListener = new FlowExplorerWorkbenchListener();
             flowWorkbenchListener.start();
@@ -95,6 +104,11 @@ public final class Activator extends AbstractUIPlugin {
             if (flowWorkbenchListener != null) {
                 flowWorkbenchListener.stop();
                 flowWorkbenchListener = null;
+            }
+
+            if (flowTestImpactService != null) {
+                flowTestImpactService.stop();
+                flowTestImpactService = null;
             }
 
             if (flowExplorerService != null) {
@@ -115,6 +129,11 @@ public final class Activator extends AbstractUIPlugin {
             if (webSphereHotSyncService != null) {
                 webSphereHotSyncService.stop();
                 webSphereHotSyncService = null;
+            }
+
+            if (wtpShortcutBridge != null) {
+                wtpShortcutBridge.stop();
+                wtpShortcutBridge = null;
             }
 
             if (jsfDiagnosticsService != null) {

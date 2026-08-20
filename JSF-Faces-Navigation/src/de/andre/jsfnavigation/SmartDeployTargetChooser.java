@@ -5,6 +5,7 @@ import java.util.List;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.ui.IWorkbenchWindow;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.dialogs.ElementListSelectionDialog;
 
@@ -14,8 +15,33 @@ public final class SmartDeployTargetChooser {
     }
 
     public static SmartDeployTarget choose(
-            final String relativeClass,
-            final List<SmartDeployTarget> targets) {
+            String relativeClass,
+            List<SmartDeployTarget> targets) {
+
+        return chooseInternal(
+                relativeClass,
+                targets,
+                "Multiple deployed modules contain "
+                        + relativeClass
+                        + ". Select the deployment target for this Eclipse output folder:");
+    }
+
+    public static SmartDeployTarget chooseWebResource(
+            String relativeWebPath,
+            List<SmartDeployTarget> targets) {
+
+        return chooseInternal(
+                relativeWebPath,
+                targets,
+                "Multiple deployed WARs contain "
+                        + relativeWebPath
+                        + ". Select the WAR for this source web root. The choice will be remembered:");
+    }
+
+    private static SmartDeployTarget chooseInternal(
+            final String subject,
+            final List<SmartDeployTarget> targets,
+            final String message) {
 
         if (targets == null
                 || targets.isEmpty()) {
@@ -36,10 +62,16 @@ public final class SmartDeployTargetChooser {
                         new Runnable() {
                             @Override
                             public void run() {
-                                Shell shell =
+                                IWorkbenchWindow window =
                                         PlatformUI.getWorkbench()
-                                                .getActiveWorkbenchWindow()
-                                                .getShell();
+                                                .getActiveWorkbenchWindow();
+
+                                if (window == null) {
+                                    return;
+                                }
+
+                                Shell shell =
+                                        window.getShell();
 
                                 ElementListSelectionDialog dialog =
                                         new ElementListSelectionDialog(
@@ -58,11 +90,7 @@ public final class SmartDeployTargetChooser {
                                 dialog.setTitle(
                                         "Smart WebSphere Deploy");
 
-                                dialog.setMessage(
-                                        "Multiple deployed modules contain "
-                                                + relativeClass
-                                                + ". Select the module for this Eclipse output folder:");
-
+                                dialog.setMessage(message);
                                 dialog.setElements(
                                         targets.toArray());
 

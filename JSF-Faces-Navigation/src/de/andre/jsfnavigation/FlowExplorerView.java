@@ -4,12 +4,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IMarker;
+import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IResourceChangeEvent;
+import org.eclipse.core.resources.IResourceChangeListener;
+import org.eclipse.core.resources.IResourceDelta;
 import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
-import org.eclipse.jface.viewers.DoubleClickEvent;
-import org.eclipse.jface.viewers.IDoubleClickListener;
+import org.eclipse.jface.viewers.IColorProvider;
 import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.viewers.ISelectionChangedListener;
+import org.eclipse.jface.viewers.SelectionChangedEvent;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITreeContentProvider;
@@ -17,17 +25,24 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.window.Window;
+import org.eclipse.jdt.core.IJavaElement;
+import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorReference;
@@ -51,6 +66,7 @@ public final class FlowExplorerView
                     FlowCategoryClassifier.VIEW,
                     FlowCategoryClassifier.CONTROLLER,
                     FlowCategoryClassifier.BEAN,
+                    FlowCategoryClassifier.TO,
                     FlowCategoryClassifier.ISP,
                     FlowCategoryClassifier.SERVICE,
                     FlowCategoryClassifier.PERSISTENCE,
@@ -61,8 +77,15 @@ public final class FlowExplorerView
 
     private Combo flowCombo;
     private Button autoCaptureButton;
+    private Button autoTestsButton;
     private TreeViewer viewer;
     private Label summaryLabel;
+
+    private Font treeZoomFont;
+    private FontData[] treeBaseFontData;
+    private int treeFontDelta;
+    private boolean suppressOpenOnSelection;
+    private IResourceChangeListener problemMarkerListener;
 
     @Override
     public void createPartControl(
@@ -75,6 +98,7 @@ public final class FlowExplorerView
 
         createHeader(parent);
         createTree(parent);
+        installProblemMarkerListener();
         refresh();
     }
 
@@ -114,6 +138,7 @@ private void createHeader(
     createFlowRow(header);
     createPrimaryActionsRow(header);
     createSecondaryActionsRow(header);
+    createTestActionsRow(header);
 
     summaryLabel =
             new Label(
@@ -347,6 +372,68 @@ private void createSecondaryActionsRow(
             });
 }
 
+
+private void createTestActionsRow(
+        Composite parent) {
+
+    Composite row =
+            actionRow(
+                    parent,
+                    2);
+
+    autoTestsButton =
+            new Button(
+                    row,
+                    SWT.CHECK);
+
+    autoTestsButton.setText(
+            "Auto tests");
+
+    autoTestsButton.setToolTipText(
+            "Automatically add JUnit tests from the caller hierarchy when a Java method you edit is touched.");
+
+    autoTestsButton.setLayoutData(
+            new GridData(
+                    SWT.FILL,
+                    SWT.CENTER,
+                    true,
+                    false));
+
+    autoTestsButton.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    FlowExplorerService service =
+                            service();
+
+                    if (service != null) {
+                        service.setAutoTestDiscovery(
+                                autoTestsButton
+                                        .getSelection());
+                    }
+                }
+            });
+
+    Button runTests =
+            actionButton(
+                    row,
+                    "Run Unit Tests",
+                    "Run safe JUnit unit tests currently in this flow. Arquillian integration tests and JPA tests are deliberately skipped.");
+
+    runTests.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    FlowJUnitRunner
+                            .runCurrentFlowUnitTests();
+                }
+            });
+}
+
 private Composite actionRow(
         Composite parent,
         int columns) {
@@ -419,6 +506,12 @@ private Button actionButton(
                                 true,
                                 true));
 
+        treeBaseFontData =
+                copyFontData(
+                        viewer.getTree()
+                                .getFont()
+                                .getFontData());
+
         viewer.setContentProvider(
                 new FlowContentProvider());
 
@@ -439,11 +532,15 @@ private Button actionButton(
                             }
                         });
 
-        viewer.addDoubleClickListener(
-                new IDoubleClickListener() {
+        viewer.addSelectionChangedListener(
+                new ISelectionChangedListener() {
                     @Override
-                    public void doubleClick(
-                            DoubleClickEvent event) {
+                    public void selectionChanged(
+                            SelectionChangedEvent event) {
+
+                        if (suppressOpenOnSelection) {
+                            return;
+                        }
 
                         ISelection selection =
                                 event.getSelection();
@@ -462,9 +559,52 @@ private Button actionButton(
                         if (first instanceof FlowEntry) {
                             openEntry(
                                     (FlowEntry) first);
+
+                        } else if (first
+                                instanceof FlowImpactTestNode) {
+
+                            openEntry(
+                                    ((FlowImpactTestNode) first)
+                                            .getEntry());
+
+                        } else if (first
+                                instanceof FlowImpactSourceNode) {
+
+                            openImpactSource(
+                                    (FlowImpactSourceNode) first);
+
+                        } else if (first
+                                instanceof FlowImpactMethodNode) {
+
+                            openImpactMethod(
+                                    (FlowImpactMethodNode) first);
                         }
                     }
                 });
+
+        viewer.getTree()
+                .addListener(
+                        SWT.MouseWheel,
+                        new org.eclipse.swt.widgets.Listener() {
+                            @Override
+                            public void handleEvent(
+                                    org.eclipse.swt.widgets.Event event) {
+
+                                if ((event.stateMask
+                                        & SWT.CTRL) == 0) {
+
+                                    return;
+                                }
+
+                                event.doit = false;
+
+                                if (event.count > 0) {
+                                    zoomTreeFont(1);
+                                } else if (event.count < 0) {
+                                    zoomTreeFont(-1);
+                                }
+                            }
+                        });
     }
 
     public void refresh() {
@@ -504,6 +644,13 @@ private Button actionButton(
         autoCaptureButton.setSelection(
                 service.isAutoCapture());
 
+        if (autoTestsButton != null
+                && !autoTestsButton.isDisposed()) {
+
+            autoTestsButton.setSelection(
+                    service.isAutoTestDiscovery());
+        }
+
         FlowDefinition flow =
                 service.getCurrentFlow();
 
@@ -525,6 +672,7 @@ private Button actionButton(
                 buildCategories(service));
 
         viewer.expandAll();
+        highlightActiveEditorFile();
     }
 
     private List<FlowCategoryNode> buildCategories(
@@ -541,16 +689,362 @@ private Button actionButton(
                             category);
 
             if (!entries.isEmpty()) {
-                result.add(
-                        new FlowCategoryNode(
-                                category,
-                                entries));
+                if (FlowCategoryClassifier.TEST.equals(
+                        category)) {
+
+                    result.add(
+                            new FlowCategoryNode(
+                                    category,
+                                    entries,
+                                    FlowImpactTreeBuilder
+                                            .build(entries)));
+
+                } else {
+                    result.add(
+                            new FlowCategoryNode(
+                                    category,
+                                    entries));
+                }
             }
         }
 
         return result;
     }
 
+
+
+
+    private void installProblemMarkerListener() {
+        problemMarkerListener =
+                new IResourceChangeListener() {
+                    @Override
+                    public void resourceChanged(
+                            IResourceChangeEvent event) {
+
+                        IResourceDelta delta =
+                                event.getDelta();
+
+                        if (delta == null
+                                || !containsMarkerChange(
+                                        delta)) {
+
+                            return;
+                        }
+
+                        refreshIfOpen();
+                    }
+                };
+
+        ResourcesPlugin.getWorkspace()
+                .addResourceChangeListener(
+                        problemMarkerListener,
+                        IResourceChangeEvent.POST_CHANGE);
+    }
+
+    private static boolean containsMarkerChange(
+            IResourceDelta delta) {
+
+        if (delta == null) {
+            return false;
+        }
+
+        if ((delta.getFlags()
+                & IResourceDelta.MARKERS) != 0) {
+
+            return true;
+        }
+
+        for (IResourceDelta child :
+                delta.getAffectedChildren()) {
+
+            if (containsMarkerChange(child)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean hasError(
+            IFile file) {
+
+        if (file == null
+                || !file.exists()) {
+
+            return false;
+        }
+
+        try {
+            return file.findMaxProblemSeverity(
+                    IMarker.PROBLEM,
+                    true,
+                    IResource.DEPTH_INFINITE)
+                    >= IMarker.SEVERITY_ERROR;
+
+        } catch (CoreException e) {
+            return false;
+        }
+    }
+
+    private static int errorCount(
+            FlowCategoryNode category) {
+
+        int count = 0;
+
+        for (FlowEntry entry :
+                category.getEntries()) {
+
+            IFile file =
+                    ResourcesPlugin.getWorkspace()
+                            .getRoot()
+                            .getFile(
+                                    new org.eclipse.core.runtime.Path(
+                                            entry.getResourcePath()));
+
+            if (hasError(file)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private void zoomTreeFont(
+            int direction) {
+
+        if (viewer == null
+                || viewer.getTree()
+                        .isDisposed()
+                || direction == 0) {
+
+            return;
+        }
+
+        int next =
+                treeFontDelta
+                + (direction > 0
+                        ? 1
+                        : -1);
+
+        if (next < -4) {
+            next = -4;
+        } else if (next > 12) {
+            next = 12;
+        }
+
+        if (next == treeFontDelta) {
+            return;
+        }
+
+        if (treeBaseFontData == null
+                || treeBaseFontData.length == 0) {
+
+            treeBaseFontData =
+                    copyFontData(
+                            viewer.getTree()
+                                    .getFont()
+                                    .getFontData());
+        }
+
+        FontData[] data =
+                new FontData[
+                        treeBaseFontData.length];
+
+        for (int i = 0;
+                i < treeBaseFontData.length;
+                i++) {
+
+            data[i] =
+                    new FontData(
+                            treeBaseFontData[i]
+                                    .getName(),
+                            Math.max(
+                                    6,
+                                    treeBaseFontData[i]
+                                            .getHeight()
+                                    + next),
+                            treeBaseFontData[i]
+                                    .getStyle());
+        }
+
+        Font replacement =
+                new Font(
+                        viewer.getTree()
+                                .getDisplay(),
+                        data);
+
+        Font old =
+                treeZoomFont;
+
+        treeZoomFont =
+                replacement;
+        treeFontDelta = next;
+
+        viewer.getTree()
+                .setFont(replacement);
+
+        if (old != null
+                && !old.isDisposed()) {
+
+            old.dispose();
+        }
+    }
+
+    private static FontData[] copyFontData(
+            FontData[] source) {
+
+        if (source == null) {
+            return new FontData[0];
+        }
+
+        FontData[] copy =
+                new FontData[
+                        source.length];
+
+        for (int i = 0;
+                i < source.length;
+                i++) {
+
+            copy[i] =
+                    new FontData(
+                            source[i].getName(),
+                            source[i].getHeight(),
+                            source[i].getStyle());
+        }
+
+        return copy;
+    }
+
+    private void highlightActiveEditorFile() {
+        IFile file =
+                EditorContext.currentFile();
+
+        highlightFile(file);
+    }
+
+    private void highlightFile(
+            IFile file) {
+
+        if (viewer == null
+                || viewer.getControl()
+                        .isDisposed()) {
+
+            return;
+        }
+
+        Object match = null;
+
+        if (file != null) {
+            String path =
+                    file.getFullPath()
+                            .toPortableString();
+
+            match =
+                    findTreeElementForPath(
+                            viewer.getInput(),
+                            path);
+        }
+
+        suppressOpenOnSelection = true;
+
+        try {
+            if (match != null) {
+                viewer.setSelection(
+                        new StructuredSelection(
+                                match),
+                        true);
+            } else {
+                viewer.setSelection(
+                        StructuredSelection.EMPTY);
+            }
+
+        } finally {
+            suppressOpenOnSelection = false;
+        }
+    }
+
+    private static Object findTreeElementForPath(
+            Object element,
+            String path) {
+
+        if (element == null
+                || path == null) {
+
+            return null;
+        }
+
+        if (element instanceof List<?>) {
+            for (Object child :
+                    (List<?>) element) {
+
+                Object match =
+                        findTreeElementForPath(
+                                child,
+                                path);
+
+                if (match != null) {
+                    return match;
+                }
+            }
+
+            return null;
+        }
+
+        if (element instanceof FlowEntry) {
+            return path.equals(
+                    ((FlowEntry) element)
+                            .getResourcePath())
+                    ? element
+                    : null;
+        }
+
+        if (element instanceof FlowImpactTestNode) {
+            return path.equals(
+                    ((FlowImpactTestNode) element)
+                            .getEntry()
+                            .getResourcePath())
+                    ? element
+                    : null;
+        }
+
+        if (element instanceof FlowCategoryNode) {
+            return findTreeElementForPath(
+                    ((FlowCategoryNode) element)
+                            .getChildren(),
+                    path);
+        }
+
+        if (element instanceof FlowImpactSourceNode) {
+            FlowImpactSourceNode source =
+                    (FlowImpactSourceNode) element;
+
+            if (path.equals(
+                    source.getSourceResourcePath())) {
+
+                return source;
+            }
+
+            return findTreeElementForPath(
+                    source.getMethods(),
+                    path);
+        }
+
+        if (element instanceof FlowImpactMethodNode) {
+            return findTreeElementForPath(
+                    ((FlowImpactMethodNode) element)
+                            .getTests(),
+                    path);
+        }
+
+        if (element instanceof FlowOtherTestsNode) {
+            return findTreeElementForPath(
+                    ((FlowOtherTestsNode) element)
+                            .getEntries(),
+                    path);
+        }
+
+        return null;
+    }
 
     private void openAllFiles() {
         FlowExplorerService service =
@@ -791,7 +1285,21 @@ private Button actionButton(
         Object first =
                 selection.getFirstElement();
 
-        if (!(first instanceof FlowEntry)) {
+        FlowEntry entry = null;
+
+        if (first instanceof FlowEntry) {
+            entry =
+                    (FlowEntry) first;
+
+        } else if (first
+                instanceof FlowImpactTestNode) {
+
+            entry =
+                    ((FlowImpactTestNode) first)
+                            .getEntry();
+        }
+
+        if (entry == null) {
             return;
         }
 
@@ -800,10 +1308,74 @@ private Button actionButton(
 
         if (service != null) {
             service.removeFile(
-                    ((FlowEntry) first)
-                            .getResourcePath());
+                    entry.getResourcePath());
 
             refresh();
+        }
+    }
+
+    private void openImpactSource(
+            FlowImpactSourceNode source) {
+
+        if (source == null) {
+            return;
+        }
+
+        IFile file =
+                ResourcesPlugin.getWorkspace()
+                        .getRoot()
+                        .getFile(
+                                new org.eclipse.core.runtime.Path(
+                                        source.getSourceResourcePath()));
+
+        if (!file.exists()) {
+            return;
+        }
+
+        try {
+            IWorkbenchWindow window =
+                    PlatformUI.getWorkbench()
+                            .getActiveWorkbenchWindow();
+
+            IWorkbenchPage page =
+                    window == null
+                            ? null
+                            : window.getActivePage();
+
+            if (page != null) {
+                IDE.openEditor(
+                        page,
+                        file,
+                        true);
+            }
+
+        } catch (Exception e) {
+            WebSphereStatusLine.show(
+                    "Could not open impacted source: "
+                    + e.getMessage());
+        }
+    }
+
+    private void openImpactMethod(
+            FlowImpactMethodNode method) {
+
+        if (method == null
+                || method.getMethodHandleIdentifier() == null
+                || method.getMethodHandleIdentifier()
+                        .isEmpty()) {
+
+            return;
+        }
+
+        IJavaElement element =
+                JavaCore.create(
+                        method.getMethodHandleIdentifier());
+
+        if (element instanceof IMethod
+                && element.exists()) {
+
+            JavaEditorOpener.open(
+                    (IMethod) element);
         }
     }
 
@@ -874,6 +1446,21 @@ private Button actionButton(
     @Override
     public void dispose() {
         instance = null;
+
+        if (problemMarkerListener != null) {
+            ResourcesPlugin.getWorkspace()
+                    .removeResourceChangeListener(
+                            problemMarkerListener);
+            problemMarkerListener = null;
+        }
+
+        if (treeZoomFont != null
+                && !treeZoomFont.isDisposed()) {
+
+            treeZoomFont.dispose();
+            treeZoomFont = null;
+        }
+
         super.dispose();
     }
 
@@ -892,6 +1479,30 @@ private Button actionButton(
                             @Override
                             public void run() {
                                 current.refresh();
+                            }
+                        });
+    }
+
+
+    public static void activeEditorChanged(
+            final IFile file) {
+
+        final FlowExplorerView current =
+                instance;
+
+        if (current == null) {
+            return;
+        }
+
+        PlatformUI.getWorkbench()
+                .getDisplay()
+                .asyncExec(
+                        new Runnable() {
+                            @Override
+                            public void run() {
+
+                                current.highlightFile(
+                                        file);
                             }
                         });
     }
@@ -922,6 +1533,33 @@ private Button actionButton(
 
                 return ((FlowCategoryNode)
                         parentElement)
+                        .getChildren()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowImpactSourceNode) {
+
+                return ((FlowImpactSourceNode)
+                        parentElement)
+                        .getMethods()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowImpactMethodNode) {
+
+                return ((FlowImpactMethodNode)
+                        parentElement)
+                        .getTests()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowOtherTestsNode) {
+
+                return ((FlowOtherTestsNode)
+                        parentElement)
                         .getEntries()
                         .toArray();
             }
@@ -940,12 +1578,31 @@ private Button actionButton(
         public boolean hasChildren(
                 Object element) {
 
-            return element
-                    instanceof FlowCategoryNode
-                    && !((FlowCategoryNode)
-                            element)
-                            .getEntries()
-                            .isEmpty();
+            if (element instanceof FlowCategoryNode) {
+                return !((FlowCategoryNode) element)
+                        .getChildren()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowImpactSourceNode) {
+                return !((FlowImpactSourceNode) element)
+                        .getMethods()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowImpactMethodNode) {
+                return !((FlowImpactMethodNode) element)
+                        .getTests()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowOtherTestsNode) {
+                return !((FlowOtherTestsNode) element)
+                        .getEntries()
+                        .isEmpty();
+            }
+
+            return false;
         }
 
         @Override
@@ -961,7 +1618,8 @@ private Button actionButton(
     }
 
     private static final class FlowLabelProvider
-            extends LabelProvider {
+            extends LabelProvider
+            implements IColorProvider {
 
         @Override
         public String getText(
@@ -973,9 +1631,104 @@ private Button actionButton(
                 FlowCategoryNode category =
                         (FlowCategoryNode) element;
 
+                int errors =
+                        errorCount(category);
+
+                boolean groupedTests =
+                        FlowCategoryClassifier.TEST.equals(
+                                category.getName())
+                        && hasImpactGroups(
+                                category);
+
                 return category.getName()
                         + " ("
                         + category.getEntries().size()
+                        + ")"
+                        + (groupedTests
+                                ? "  [grouped by changed file]"
+                                : "")
+                        + (errors > 0
+                                ? "  ["
+                                        + errors
+                                        + (errors == 1
+                                                ? " error]"
+                                                : " errors]")
+                                : "");
+            }
+
+            if (element
+                    instanceof FlowImpactSourceNode) {
+
+                FlowImpactSourceNode source =
+                        (FlowImpactSourceNode) element;
+
+                IFile file =
+                        fileForPath(
+                                source.getSourceResourcePath());
+
+                String name =
+                        file.exists()
+                                ? file.getName()
+                                : source.getSourceResourcePath();
+
+                int methods =
+                        source.getMethods().size();
+
+                int tests =
+                        source.getUniqueTestCount();
+
+                return "Impacted by "
+                        + name
+                        + "  ("
+                        + methods
+                        + (methods == 1
+                                ? " method, "
+                                : " methods, ")
+                        + tests
+                        + (tests == 1
+                                ? " test)"
+                                : " tests)");
+            }
+
+            if (element
+                    instanceof FlowImpactMethodNode) {
+
+                FlowImpactMethodNode method =
+                        (FlowImpactMethodNode) element;
+
+                int tests =
+                        method.getTests().size();
+
+                return method.getMethodLabel()
+                        + "  ("
+                        + tests
+                        + (tests == 1
+                                ? " test)"
+                                : " tests)");
+            }
+
+            if (element
+                    instanceof FlowImpactTestNode) {
+
+                FlowImpactTestNode test =
+                        (FlowImpactTestNode) element;
+
+                return flowEntryLabel(
+                        test.getEntry(),
+                        test.getDepth(),
+                        true);
+            }
+
+            if (element
+                    instanceof FlowOtherTestsNode) {
+
+                int count =
+                        ((FlowOtherTestsNode) element)
+                                .getEntries()
+                                .size();
+
+                return "Other tests  ("
+                        + count
                         + ")";
             }
 
@@ -985,25 +1738,148 @@ private Button actionButton(
                 FlowEntry entry =
                         (FlowEntry) element;
 
-                IFile file =
-                        ResourcesPlugin.getWorkspace()
-                                .getRoot()
-                                .getFile(
-                                        new org.eclipse.core.runtime.Path(
-                                                entry.getResourcePath()));
+                return flowEntryLabel(
+                        entry,
+                        entry.getImpactOrigins()
+                                .isEmpty()
+                                ? entry.getImpactDepth()
+                                : 0,
+                        FlowCategoryClassifier.TEST.equals(
+                                entry.getCategory()));
+            }
 
-                if (file.exists()) {
-                    return file.getName()
-                            + "  —  "
-                            + file.getProjectRelativePath()
-                                    .toPortableString();
+            return super.getText(element);
+        }
+
+        private static boolean hasImpactGroups(
+                FlowCategoryNode category) {
+
+            for (Object child :
+                    category.getChildren()) {
+
+                if (child instanceof FlowImpactSourceNode) {
+                    return true;
                 }
+            }
 
+            return false;
+        }
+
+        private static String flowEntryLabel(
+                FlowEntry entry,
+                int depth,
+                boolean showDepth) {
+
+            IFile file =
+                    fileForPath(
+                            entry.getResourcePath());
+
+            if (!file.exists()) {
                 return entry.getResourcePath()
                         + "  [missing]";
             }
 
-            return super.getText(element);
+            StringBuilder label =
+                    new StringBuilder();
+
+            if (hasError(file)) {
+                label.append(
+                        "[ERROR]  ");
+            }
+
+            if (showDepth
+                    && depth > 0) {
+
+                if (depth == 1) {
+                    label.append(
+                            "[DIRECT]  ");
+                } else {
+                    label.append('[')
+                            .append(depth)
+                            .append(
+                                    " calls away]  ");
+                }
+            }
+
+            label.append(
+                    file.getName())
+                    .append("  —  ")
+                    .append(
+                            file.getProjectRelativePath()
+                                    .toPortableString());
+
+            return label.toString();
+        }
+
+        private static IFile fileForPath(
+                String path) {
+
+            return ResourcesPlugin.getWorkspace()
+                    .getRoot()
+                    .getFile(
+                            new org.eclipse.core.runtime.Path(
+                                    path));
+        }
+
+        @Override
+        public Color getForeground(
+                Object element) {
+
+            boolean error = false;
+
+            if (element instanceof FlowCategoryNode) {
+                error =
+                        errorCount(
+                                (FlowCategoryNode)
+                                        element) > 0;
+
+            } else if (element
+                    instanceof FlowEntry) {
+
+                error =
+                        hasError(
+                                fileForPath(
+                                        ((FlowEntry) element)
+                                                .getResourcePath()));
+
+            } else if (element
+                    instanceof FlowImpactTestNode) {
+
+                error =
+                        hasError(
+                                fileForPath(
+                                        ((FlowImpactTestNode) element)
+                                                .getEntry()
+                                                .getResourcePath()));
+
+            } else if (element
+                    instanceof FlowImpactSourceNode) {
+
+                error =
+                        hasError(
+                                fileForPath(
+                                        ((FlowImpactSourceNode) element)
+                                                .getSourceResourcePath()));
+            }
+
+            if (!error) {
+                return null;
+            }
+
+            Display display =
+                    Display.getCurrent();
+
+            return display == null
+                    ? null
+                    : display.getSystemColor(
+                            SWT.COLOR_RED);
+        }
+
+        @Override
+        public Color getBackground(
+                Object element) {
+
+            return null;
         }
     }
 }

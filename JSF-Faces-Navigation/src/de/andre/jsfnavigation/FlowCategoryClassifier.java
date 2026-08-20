@@ -7,6 +7,7 @@ public final class FlowCategoryClassifier {
     public static final String VIEW = "View";
     public static final String CONTROLLER = "Controller";
     public static final String BEAN = "Bean";
+    public static final String TO = "TO";
     public static final String ISP = "ISP";
     public static final String SERVICE = "Service";
     public static final String PERSISTENCE = "Persistence";
@@ -43,7 +44,17 @@ public final class FlowCategoryClassifier {
             return RESOURCE;
         }
 
-        if (lower.contains("test")) {
+        String path =
+                file.getProjectRelativePath()
+                        .toPortableString()
+                        .toLowerCase();
+
+        if (lower.contains("test")
+                || path.indexOf("src/test") >= 0
+                || path.indexOf("/test/") >= 0
+                || path.indexOf("/tests/") >= 0
+                || path.indexOf("src/integration") >= 0) {
+
             return TEST;
         }
 
@@ -53,6 +64,14 @@ public final class FlowCategoryClassifier {
 
         if (name.endsWith("Bean.java")) {
             return BEAN;
+        }
+
+        if (name.endsWith("TO.java")
+                || name.endsWith("Dto.java")
+                || name.endsWith("DTO.java")
+                || name.endsWith("TransferObject.java")) {
+
+            return TO;
         }
 
         if (name.endsWith("ISP.java")

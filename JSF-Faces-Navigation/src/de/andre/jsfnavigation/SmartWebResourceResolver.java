@@ -15,19 +15,20 @@ public final class SmartWebResourceResolver {
             IFile source,
             IPath relativeWebPath) {
 
-        if (!SmartDeploySettings.isEnabled()
-                || source == null
+        if (source == null
                 || relativeWebPath == null) {
 
             return null;
         }
 
+        /*
+         * Web-resource hot sync is intentionally independent from the
+         * opt-in Smart Java/Class Deploy setting. Copying an XHTML/JS/CSS
+         * resource into an exploded WAR is safe and is controlled by the
+         * separate WebSphere Hot Sync preferences.
+         */
         SmartDeployMappingStore mappings =
                 Activator.getSmartDeployMappingStore();
-
-        if (mappings == null) {
-            return null;
-        }
 
         String key =
                 "WEB|"
@@ -36,7 +37,9 @@ public final class SmartWebResourceResolver {
                 + sourceRootKey(source);
 
         SmartDeployTarget mapped =
-                mappings.get(key);
+                mappings == null
+                        ? null
+                        : mappings.get(key);
 
         if (mapped != null
                 && mapped.getKind()
@@ -55,13 +58,15 @@ public final class SmartWebResourceResolver {
                                     .toPortableString());
 
         SmartDeployTarget selected =
-                SmartDeployTargetChooser.choose(
+                SmartDeployTargetChooser.chooseWebResource(
                         relativeWebPath
                             .toPortableString(),
                         candidates);
 
         if (selected != null) {
-            mappings.put(key, selected);
+            if (mappings != null) {
+                mappings.put(key, selected);
+            }
 
             WebSphereStatusLine.show(
                     "Smart Deploy learned web mapping: "

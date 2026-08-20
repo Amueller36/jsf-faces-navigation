@@ -99,21 +99,14 @@ public final class WebSphereHotSyncPaths {
             return null;
         }
 
+        /*
+         * An explicitly configured deployed root is an override. When it is
+         * empty, discover the correct exploded WAR from the current resource
+         * path and remember that source-root -> WAR mapping. This does NOT
+         * require Smart Java/Class Deploy to be enabled.
+         */
         File root =
                 configuredDeployedWebRoot();
-
-        if (SmartDeploySettings.isEnabled()) {
-            File smartRoot =
-                    SmartWebResourceResolver.resolveWebRoot(
-                            source,
-                            relative);
-
-            if (smartRoot != null) {
-                return new File(
-                        smartRoot,
-                        relative.toOSString());
-            }
-        }
 
         if (root != null) {
             return new File(
@@ -121,13 +114,22 @@ public final class WebSphereHotSyncPaths {
                     relative.toOSString());
         }
 
-        if (root == null) {
-            List<File> candidates =
-                    discoverDeployedWebRoots();
+        File smartRoot =
+                SmartWebResourceResolver.resolveWebRoot(
+                        source,
+                        relative);
 
-            if (candidates.size() == 1) {
-                root = candidates.get(0);
-            }
+        if (smartRoot != null) {
+            return new File(
+                    smartRoot,
+                    relative.toOSString());
+        }
+
+        List<File> candidates =
+                discoverDeployedWebRoots();
+
+        if (candidates.size() == 1) {
+            root = candidates.get(0);
         }
 
         return root == null

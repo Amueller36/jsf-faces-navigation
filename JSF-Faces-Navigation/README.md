@@ -1,4 +1,87 @@
-# JSF EL Navigation 1.12.1
+# JSF EL Navigation 1.12.7
+
+Version 1.12.7 groups automatically discovered impacted tests by the exact
+production code that caused them to be discovered.
+
+The `Tests` tree is now hierarchical:
+
+```text
+Tests
+  Impacted by AumiAntragBean.java
+    save(...)
+      [DIRECT] AumiAntragBeanTest.java
+      [2 calls away] AntragServiceTest.java
+    load(...)
+      [3 calls away] NavigationTest.java
+  Impacted by DetailsichtAntraegeController.java
+    speichernUndNavigieren(...)
+      [2 calls away] NavigationTest.java
+  Other tests
+    ManuallyAddedTest.java
+```
+
+A test may intentionally appear under more than one changed method/file when
+multiple edits affect it. Each relationship keeps its own shortest caller
+distance. Clicking a changed-file group opens that source file, clicking a
+method group opens that exact Java method, and clicking a test opens the test.
+
+Impact relationships are persisted in Flow Explorer state format v4. Existing
+v1-v3 flow state remains readable; older impact-depth-only entries appear under
+`Other tests` until they are rediscovered with source/method information.
+
+Version 1.12.6 makes impacted tests visually easier to understand in the
+Flow Explorer.
+
+- impacted-test caller search now stops at 5 caller levels instead of 8
+- each impacted test stores its shortest discovered caller distance
+- direct callers are labeled `[DIRECT]`
+- indirect callers are labeled `[2 calls away]`, `[3 calls away]`, etc.
+- impacted tests are sorted nearest-first inside the `Tests` category
+- the Tests header shows `[nearest first]` whenever impact-distance data exists
+- caller distance is persisted in flow state format v3; existing v1/v2 flows
+  remain readable and simply start with no impact-distance metadata
+
+Version 1.12.5 adds test-impact assistance and Eclipse problem visibility to
+the JSF Flow Explorer.
+
+- Flow entries with an Eclipse error are shown in red and prefixed with
+  `[ERROR]`; category headers also show the number of files with errors.
+- `Auto tests` watches methods edited in saved Java files and follows the Java
+  caller hierarchy (up to 8 levels) to find JUnit tests that directly or
+  indirectly call those methods. Newly found test files are added to the
+  current flow automatically.
+- `Run Unit Tests` runs the safe JUnit test classes currently in the flow.
+  Arquillian/generic integration tests and JPA/persistence tests are
+  deliberately excluded from this bulk action.
+- Auto-test discovery is enabled by default and can be toggled independently
+  from normal Auto file capture.
+
+Version 1.12.4 improves the JSF Flow Explorer:
+
+- a single click on a file opens/activates it in the editor
+- `Ctrl+MouseWheel` over the flow tree changes its text size
+- the file belonging to the currently active editor is automatically selected
+  and revealed when it is part of the current flow
+- a dedicated `TO` category was added for `*TO`, `*DTO`, `*Dto` and
+  `*TransferObject` Java classes
+- persisted flow entries are reclassified on startup so existing TO files move
+  out of `Other` automatically
+
+Version 1.12.3 fixes automatic web-resource hot sync so XHTML/JS/CSS WAR
+resolution no longer depends on the opt-in Smart Java/Class Deploy checkbox or
+a manually configured deployed web-module root. The configured root is now an
+optional override; otherwise the plug-in matches the current resource path
+against exploded WARs under the configured WebSphere profile, remembers the
+source-root -> WAR mapping, and reuses it on later saves.
+
+Version 1.12.2 makes the XHTML shortcuts independent of Eclipse/WTP key-binding
+conflicts. A small UI-thread shortcut bridge intercepts `Ctrl+Alt+H` and
+`Ctrl+/` only while the WTP HTML/Facelets `StructuredTextEditor` is active,
+then executes the plug-in commands directly.
+
+It also refreshes existing persistent JSF diagnostic markers once at startup.
+This removes stale combined-reference warnings created by older parser versions,
+then revalidates only the XHTML files that previously had plug-in warnings.
 
 Version 1.12.1 fixes the two new XHTML hotkeys for the actual WTP HTML/Facelets
 `StructuredTextEditor` context and corrects comma-separated JSF/PrimeFaces

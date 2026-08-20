@@ -29,16 +29,6 @@ public final class OpenDeployedWebResourceHandler
             return null;
         }
 
-        if (!SmartDeploySettings.isEnabled()
-                && WebSphereDeploymentChooser.ensureConfiguredRoot()
-                        == null) {
-
-            error(
-                    "No deployed WebSphere web-module root is configured.");
-
-            return null;
-        }
-
         File target =
                 WebSphereHotSyncPaths.resolveTarget(source);
 

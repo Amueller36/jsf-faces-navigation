@@ -30,12 +30,6 @@ public final class FlowAutoCaptureListener
         FlowExplorerService service =
                 Activator.getFlowExplorerService();
 
-        if (service == null
-                || !service.isAutoCapture()) {
-
-            return;
-        }
-
         if (!(partRef.getPart(false)
                 instanceof IEditorPart)) {
 
@@ -63,8 +57,15 @@ public final class FlowAutoCaptureListener
             return;
         }
 
-        service.addFile(file);
-        FlowExplorerView.refreshIfOpen();
+        FlowExplorerView.activeEditorChanged(
+                file);
+
+        if (service != null
+                && service.isAutoCapture()) {
+
+            service.addFile(file);
+            FlowExplorerView.refreshIfOpen();
+        }
     }
 
     @Override

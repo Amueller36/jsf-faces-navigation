@@ -46,22 +46,9 @@ public final class SyncCurrentWebResourceHandler
         }
 
         /*
-         * Smart Deploy resolves the actual WAR from the current resource's
-         * relative web path. Do not run the legacy "choose any WAR" dialog
-         * first, otherwise Ctrl+Alt+S asks from every deployed application
-         * before smart matching ever gets a chance to run.
+         * syncNow() performs path-based WAR discovery itself. Do not run the
+         * legacy generic deployment chooser here.
          */
-        if (!SmartDeploySettings.isEnabled()
-                && WebSphereDeploymentChooser.ensureConfiguredRoot()
-                        == null) {
-
-            showError(
-                    "No deployed web-module root could be found. "
-                    + "Configure the WebSphere profile/deployed root under "
-                    + "Preferences > JSF / Java Navigation > WebSphere Hot Sync.");
-
-            return null;
-        }
 
         final WebSphereHotSyncService service =
                 Activator.getWebSphereHotSyncService();

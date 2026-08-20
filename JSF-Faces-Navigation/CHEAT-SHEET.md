@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.12.1 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.12.7 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -1207,3 +1207,243 @@ a component ID. The ordinary component IDs are validated independently.
 The JSF view-symbol persistent cache is automatically rebuilt once after the
 upgrade so an old combined warning such as
 `antragForm,@form,noValidation` cannot remain cached.
+
+---
+
+## 1.12.2 shortcut reliability + warning cleanup
+
+`Ctrl+Alt+H` and `Ctrl+/` are now intercepted directly while the active editor
+is the WTP HTML/Facelets source editor:
+
+```text
+org.eclipse.wst.html.core.htmlsource.source
+```
+
+This avoids conflicts with Eclipse's existing global shortcuts such as
+**Open Call Hierarchy** on `Ctrl+Alt+H`.
+
+The bridge is restricted to `.xhtml`, `.html`, `.htm`, and `.xml` files, so
+Java/JDT keyboard behavior is left alone.
+
+On plug-in startup, old persistent JSF warning markers are removed and only
+the files that had those markers are revalidated. This is specifically meant
+to clear stale warnings left by older component-reference tokenization, for
+example an old combined warning for:
+
+```xhtml
+update=":antragForm,@form"
+```
+
+The current parser treats the comma as a separator and ignores `@form` as a
+search expression.
+
+---
+
+## 1.12.3 automatic XHTML hot-sync fix
+
+Web-resource hot sync is independent from **Smart Java/Class Deploy**.
+
+When **Enable WebSphere hot sync** and **Automatically sync supported web
+resources after save** are enabled, saving an XHTML/JS/CSS file now resolves
+the target in this order:
+
+1. Explicit **Deployed web module root** preference, when configured.
+2. Remembered source-web-root -> WAR mapping.
+3. Exact relative-resource-path match in exploded WARs under
+   `<profile>/installedApps/...`. One match is selected automatically; multiple
+   matches open a one-time chooser and remember the selection.
+4. If the profile contains only one exploded WAR, use that as a final fallback.
+
+`Ctrl+Alt+S` and **Open WebSphere Deployed Copy** use the same resolver and no
+longer invoke the old generic "pick any WAR" guard first.
+
+---
+
+## 1.12.4 Flow Explorer improvements
+
+### Single-click navigation
+
+Clicking a **file entry once** opens/activates that file in the editor.
+
+Clicking a category header such as `Bean (4)` or `TO (2)` does not open
+anything.
+
+### Active editor highlighting
+
+When the active editor changes, the Flow Explorer automatically selects and
+reveals the matching file entry if that file belongs to the current flow.
+
+This works even when **Auto** capture is disabled. Auto capture only controls
+whether newly visited files are added to the flow.
+
+### Flow Explorer text zoom
+
+Hover the mouse over the Flow Explorer file tree and use:
+
+`Ctrl+MouseWheel`
+
+to increase/decrease the tree text size.
+
+The zoom uses a stable copy of the original Eclipse tree font and safely
+replaces/disposes only the custom zoom font.
+
+### TO category
+
+The category order is now:
+
+```text
+View
+Controller
+Bean
+TO
+ISP
+Service
+Persistence
+Resources
+Tests
+Other
+```
+
+Examples classified as `TO`:
+
+```text
+UserTO.java
+UserDTO.java
+UserDto.java
+UserTransferObject.java
+```
+
+Entities, repositories and DAOs remain under `Persistence`.
+
+Existing persisted flow entries are reclassified when the plug-in starts, so
+old TO files previously shown under `Other` migrate automatically.
+
+---
+
+## 1.12.5 Flow errors + impacted tests
+
+### Eclipse errors in the Flow Explorer
+
+Any flow file that currently has an Eclipse **error** problem marker is shown
+in red and with:
+
+```text
+[ERROR]  SomeClass.java — src/main/java/...
+```
+
+Category headers also show the number of affected files, for example:
+
+```text
+Controller (3)  [1 error]
+```
+
+The view listens for Eclipse marker changes and refreshes automatically.
+
+### Auto tests
+
+The Flow Explorer now has an independent **Auto tests** checkbox.
+
+When enabled, the plug-in remembers JDT method changes while you edit and waits
+until the Java file is actually saved. It then follows Java callers upward,
+similar to repeatedly looking at the call hierarchy, up to 5 levels deep.
+
+If a JUnit test class is found anywhere in that caller chain, the test file is
+added to the current flow under `Tests`.
+
+This is independent from normal **Auto** capture. You can disable automatic
+file capture while still keeping automatic impacted-test discovery.
+
+### Run Unit Tests
+
+The **Run Unit Tests** button runs the eligible JUnit classes currently present
+under `Tests` in the active flow.
+
+For safety, the bulk button deliberately skips:
+
+- Arquillian integration tests (`org.jboss.arquillian`, `Arquillian.class`)
+- generic integration tests (`*IntegrationTest`, `*IT`, integration source folders/tags)
+- JPA/persistence tests (JPA API / `EntityManager` / persistence-context usage,
+  or clearly JPA/persistence-named test classes)
+
+Skipped test counts are reported in the Eclipse status line.
+
+Tests are launched through Eclipse's normal JUnit launcher, one safe test class
+at a time. Temporary launch configurations are deleted after each run.
+
+This conservative bulk-run policy is intentional: impacted Arquillian/JPA tests
+can still appear in the Flow Explorer so you know they exist, but they are not
+accidentally executed by **Run Unit Tests**.
+
+---
+
+## 1.12.6 Impact distance in Tests
+
+Impacted tests are now shown nearest-first with a clear caller-distance badge:
+
+```text
+Tests (4)  [nearest first]
+
+[DIRECT]         AumiAntragBeanTest.java
+[2 calls away]   AntragServiceTest.java
+[3 calls away]   AntragControllerTest.java
+[5 calls away]   SomeWorkflowTest.java
+```
+
+`[DIRECT]` means the test calls the edited method directly.
+
+`[2 calls away]` means there is one intermediate production method between the
+test and the edited method, and so on.
+
+The automatic caller search now has a hard ceiling of **5 levels**. If the same
+test is reached through multiple caller paths, the shortest discovered distance
+is kept.
+
+Tests that were added manually and have no impact-distance information are
+still shown normally, after the impacted tests.
+
+The distance is stored in Flow Explorer state format v3. Existing v1/v2 flows
+remain compatible; their existing entries simply start with distance `0`
+(no impact badge).
+
+---
+
+## 1.12.7 Impacted tests grouped by changed code
+
+The `Tests` category is no longer one flat impacted-test list. Automatically
+found tests are grouped first by the **changed production file**, then by the
+**exact changed method**:
+
+```text
+Tests (5)  [grouped by changed file]
+
+▼ Impacted by AumiAntragBean.java  (2 methods, 3 tests)
+    ▼ save(Antrag)  (2 tests)
+        [DIRECT]        AumiAntragBeanTest.java
+        [2 calls away]  AntragServiceTest.java
+    ▼ load(Long)  (1 test)
+        [3 calls away]  NavigationTest.java
+
+▼ Impacted by DetailsichtAntraegeController.java  (1 method, 1 test)
+    ▼ speichernUndNavigieren()  (1 test)
+        [2 calls away]  NavigationTest.java
+
+▼ Other tests  (1)
+    ManuallyAddedTest.java
+```
+
+The same test can appear in multiple groups on purpose. That means multiple
+changed methods/files independently lead to that test. The underlying flow
+still stores the test file only once, so **Run Unit Tests** does not run it
+multiple times.
+
+Navigation is also contextual:
+
+- single-click a changed-file group → open that source file
+- single-click a changed-method group → open that exact method
+- single-click an impacted test → open the test file
+
+Each changed-method → test relationship stores its own shortest caller distance
+(up to the existing 5-level ceiling).
+
+Flow state format v4 persists these relationships and remains backward
+compatible with v1-v3 state files.

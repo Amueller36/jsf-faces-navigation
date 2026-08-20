@@ -96,6 +96,84 @@ public final class JsfDiagnosticsService {
                 .addResourceChangeListener(
                         listener,
                         IResourceChangeEvent.POST_CHANGE);
+
+        scheduleInitialMarkerRefresh();
+    }
+
+
+    private void scheduleInitialMarkerRefresh() {
+        Job job =
+                new Job(
+                        "Refresh JSF diagnostics") {
+
+                    @Override
+                    protected IStatus run(
+                            IProgressMonitor monitor) {
+
+                        try {
+                            IMarker[] markers =
+                                    ResourcesPlugin
+                                            .getWorkspace()
+                                            .getRoot()
+                                            .findMarkers(
+                                                    MARKER_TYPE,
+                                                    false,
+                                                    IResource.DEPTH_INFINITE);
+
+                            Set<IFile> files =
+                                    new HashSet<IFile>();
+
+                            for (IMarker marker :
+                                    markers) {
+
+                                IResource resource =
+                                        marker.getResource();
+
+                                if (resource
+                                        instanceof IFile) {
+
+                                    IFile file =
+                                            (IFile)
+                                                    resource;
+
+                                    if (file.exists()
+                                            && isView(
+                                                    file.getName())) {
+
+                                        files.add(file);
+                                    }
+                                }
+
+                                try {
+                                    marker.delete();
+                                } catch (CoreException ignored) {
+                                    // Continue refreshing the remaining files.
+                                }
+                            }
+
+                            /*
+                             * Revalidate files that had our persistent markers.
+                             * This removes stale warnings after parser/index
+                             * upgrades without rescanning every XHTML page.
+                             */
+                            for (IFile file : files) {
+                                if (monitor.isCanceled()) {
+                                    break;
+                                }
+
+                                validate(file);
+                            }
+
+                        } catch (CoreException e) {
+                            // Diagnostics refresh is best effort only.
+                        }
+
+                        return Status.OK_STATUS;
+                    }
+                };
+
+        job.setSystem(true);
+        job.schedule(1000L);
     }
 
     public void stop() {
