@@ -1,4 +1,530 @@
-# JSF EL Navigation 1.12.9
+# JSF EL Navigation 1.14.0
+
+Version 1.14.0 adds workspace-aware existing-test targeting and the first
+XSD/JAXB navigation layer.
+
+
+### New-test package migration: `de.zivit` -> `de.itzbund`
+
+Existing production classes can still live in the historical `de.zivit.*`
+namespace, but **newly suggested test files** now use the current organization
+package automatically.
+
+Example:
+
+```text
+production:
+de.zivit.ustv.vatrefund.foo.AuslandsantragISP
+
+suggested new test:
+de.itzbund.ustv.vatrefund.foo.AuslandsantragISPTest
+```
+
+The rule only affects suggested new test locations. Existing tests/classes are
+not renamed or moved.
+
+### XHTML completion now uses Eclipse's native popup
+
+JSF/PrimeFaces/RichFaces tag and attribute proposals now participate in WTP's
+normal Structured Text Editor content-assist UI.
+
+`Ctrl+Alt+Space` still invokes the plug-in completion command, but when the
+caret is in XHTML tag/attribute markup it delegates to Eclipse's own content
+assistant. This gives the standard caret-anchored proposal popup instead of the
+old modal selection dialog, and the plug-in proposals can coexist with WTP's
+built-in proposals.
+
+Because the processor is registered with WTP's normal HTML/XML/default
+partitions, ordinary Eclipse content assist (`Ctrl+Space`) can also include the
+same JSF markup proposals in `.xhtml` files.
+
+The old modal chooser remains only as a compatibility fallback if a custom/old
+WTP editor configuration does not expose the normal content-assist operation.
+
+No extra background indexing is added for this UI change: proposal computation
+reuses the existing per-project taglib catalog cache and only runs when content
+assist is invoked.
+
+### Existing test discovery + insertion
+
+`Generate Test Helper...` no longer assumes tests live in the production
+project.
+
+The generator queries Eclipse JDT's existing workspace type index and ranks
+matching test classes across all Java projects. This is designed for workspaces
+with dedicated test projects such as:
+
+```text
+VAT-Refund-JUnit
+VAT-Refund-TestJPA
+VAT-Refund-TestEJB
+VAT-Refund-Regression
+```
+
+For a production type such as `AuslandsantragISP`, candidates like
+`AuslandsantragISPTest`, `AuslandsantragISPJPATest`, integration tests, etc.
+are ranked using:
+
+```text
+production-class name match
+package similarity
+JUnit/JPA/integration classification
+test-project name hints (*JUnit, *TestJPA, *TestEJB, *Regression)
+```
+
+The generator dialog now contains:
+
+```text
+Existing test: [candidate combo]
+
+Open Test
+Insert...
+Copy
+```
+
+Switching generator mode automatically prefers the matching test kind:
+
+```text
+Mockito helper / unit scaffold -> UNIT / *JUnit candidate
+JPA scaffold                  -> JPA / *TestJPA candidate
+```
+
+The test search runs only when the generator is explicitly requested and uses
+JDT's indexed type-name search rather than walking every Java source file.
+
+`Insert...` is explicit and inserts the currently previewed snippet before the
+chosen test class' closing brace. It refuses to modify a target with unsaved
+changes and removes generated `@Mock` / `@InjectMocks` fields when the same
+field name already exists. A duplicate generated `_shouldTODO` method name gets
+a numeric suffix. The target is opened afterward for review.
+
+### XSD / JAXB navigation
+
+The plug-in now maintains a lightweight XSD definition index for `.xsd` files.
+It recognizes named:
+
+```text
+complexType
+simpleType
+element
+attribute
+group
+attributeGroup
+```
+
+with arbitrary XML Schema prefixes, not only `xs:` / `xsd:`.
+
+In XSD source, Ctrl+Click navigation supports:
+
+```xml
+type="tns:ApplicationType"
+base="tns:BaseApplicationType"
+ref="tns:application"
+schemaLocation="../common/common.xsd"
+```
+
+`type` / `base` prefer XSD type declarations and `ref` prefers
+element/attribute/group declarations. Built-in `xs:*` types are deliberately
+left to Eclipse instead of falling back to unrelated project declarations.
+
+`schemaLocation` supports relative workspace paths, workspace-absolute paths
+and `platform:/resource/...`.
+
+Ctrl+Click a named XSD declaration such as:
+
+```xml
+<xs:complexType name="ApplicationType">
+```
+
+to jump to a matching JAXB Java type when one can be resolved from the JDT
+index.
+
+The reverse also works from JAXB annotation names:
+
+```java
+@XmlType(name = "ApplicationType")
+@XmlRootElement(name = "application")
+@XmlElement(name = "country")
+```
+
+Ctrl+Click the `name` string to jump back to matching XSD declarations.
+
+When several XSD/JAXB candidates match, a chooser is shown instead of silently
+picking an arbitrary one.
+
+### Flow Explorer: JAXB + Schema
+
+Two new Flow categories are available:
+
+```text
+JAXB
+Schema
+```
+
+JAXB Java files are detected semantically from annotations such as
+`@XmlType`, `@XmlRootElement`, `@XmlAccessorType`, `@XmlEnum` and
+`@XmlRegistry`.
+
+Architecture Focus can now extend a related JAXB class to its matching XSD file
+when both are already present in the active Flow:
+
+```text
+Controller
+  [FOCUS] DetailsichtController.java
+
+JAXB
+  • ApplicationType.java
+
+Schema
+  • application.xsd
+```
+
+### XSD performance design
+
+The XSD layer is intentionally separate from Java AST/call-hierarchy work.
+
+```text
+persistent snapshot: xsd-index-v1.bin
+startup: snapshot available immediately
+validation: background Job after startup
+updates: incremental POST_CHANGE only for .xsd files
+parsing: lightweight bounded text/regex scan, no DOM/XSD model build
+per XSD file limit: 8 MiB
+XSD -> JAXB: exact JDT indexed type search, on-demand only
+JAXB search cache: 128 entries / 30-second TTL
+Flow JAXB -> XSD: O(1)-style XSD index lookup after Java relation is known
+```
+
+The existing-test finder is similarly on-demand and uses JDT's workspace type
+index, so neither feature adds a workspace-wide Java source scan to ordinary
+typing, Flow refreshes or editor navigation.
+
+Version 1.13.3 adds an on-demand test-helper generator directly to Java
+method context menus.
+
+### Generate Test Helper...
+
+Right-click inside a Java method and choose:
+
+```text
+Generate Test Helper...
+```
+
+The command also understands an `IMethod` selected in Eclipse Outline/Java
+structured selections.
+
+The generator analyzes the selected method with JDT bindings in a background
+Job. It follows internal helper methods declared in the same class and
+superclasses (bounded depth 4 / 30 methods / 12 source compilation units) so a
+dependency used by a private/inherited helper is still visible to the generator.
+
+It detects field collaborators actually called on the selected method path and
+builds three copy/paste profiles:
+
+```text
+Mockito mock helper method
+Mockito unit test scaffold
+JPA test scaffold
+```
+
+For normal unit-test code the default is the mock-helper profile. Example:
+
+```java
+@Mock
+private UserService userService;
+
+private void mockLoadDependencies() {
+    when(userService.findUser(anyString()))
+        .thenReturn(/* TODO User */ null);
+}
+```
+
+The full Mockito scaffold additionally generates:
+
+```text
+@Mock collaborator fields
+@InjectMocks subject
+@Test method
+Arrange parameter placeholders
+when(...) stubs for non-void collaborator calls
+subject.method(...)
+basic assertion placeholder
+verify(...) interaction suggestions
+```
+
+Primitive/String argument matchers are made more specific (`anyInt()`,
+`anyString()`, etc.) to reduce overload ambiguity. Behavior-specific return
+values and assertions deliberately remain TODOs rather than being invented.
+
+When JPA API usage is detected in the selected method/helper path, the dialog
+defaults to the JPA scaffold instead. It reminds the developer to use the
+project's cleanup-tracked persistence helper and, for real DB round-trip
+assertions, to flush and clear/renew the persistence context at the intended
+boundary.
+
+The result is shown in a resizable code dialog with a mode selector and a
+`Copy` button. The generator never edits the Java source automatically.
+
+This feature is deterministic/offline: it uses the project's JDT source model
+and bindings and does not call an external AI service.
+
+Version 1.13.2 improves test-data cleanup analysis and adds fast
+text/regex filtering to the JSF Flow Explorer.
+
+### Tx Lens now follows helper implementations and superclasses
+
+The entity leak-risk analysis no longer stops at the visible test method.
+
+For every test method, the on-demand cleanup scan now follows workspace-source
+helper calls with a bounded recursive traversal. It therefore detects cases
+such as:
+
+```java
+@Test
+public void testSomething() {
+    persistEntity(antrag);       // helper in same class OR inherited
+}
+```
+
+where `persistEntity` is implemented:
+
+- in the same test class,
+- in a superclass / base JPA test class,
+- or in another workspace helper reached from that method.
+
+It additionally inspects cleanup lifecycle methods in the test class and its
+superclasses:
+
+```text
+@After
+@AfterEach
+@AfterAll
+@AfterMethod
+@AfterTest
+tearDown()
+```
+
+and recursively follows helper calls from those lifecycle methods too.
+
+The report explicitly says how many helper/lifecycle methods were inspected and
+whether same-class or inherited helpers were encountered.
+
+Leak warnings remain conservative. If an inherited `@After` cleanup exists but
+a directly persisted entity is not visibly registered with that cleanup path,
+the lens still reports a possible leak rather than assuming the superclass can
+magically identify the row.
+
+Performance guards for this deeper scan:
+
+```text
+on-demand Tx Lens only
+max helper depth:        5
+max inspected methods:  60
+max parsed source units: 18
+cycle prevention by JDT method handle
+cancellable background Eclipse Job
+```
+
+So normal editing, Flow selection, saves and JUnit gutter rendering do not pay
+for superclass/helper cleanup analysis.
+
+### Flow Explorer filtering
+
+The Flow Explorer header now has:
+
+```text
+Filter…
+Clear Filter
+```
+
+and `Ctrl+F` while the Flow tree is focused opens the same filter dialog.
+
+Normal input is a case-insensitive text filter:
+
+```text
+antrag
+Controller
+postbuch
+```
+
+It matches category, filename and workspace/project path.
+
+Regex is supported in either form:
+
+```text
+re:.*Antrag.*(Bean|Controller)
+```
+
+or:
+
+```text
+/.*Antrag.*(Bean|Controller)/
+```
+
+Invalid regexes are rejected without replacing the current filter.
+
+Filtering is purely in-memory over entries already present in the active Flow;
+it performs no workspace search, Java search or AST parsing. Test impact groups
+are rebuilt from the filtered test entries, and the summary line shows the
+active filter.
+
+Version 1.13.1 moves the JUnit play action to the place it was actually
+intended: the Java editor gutter beside each runnable test method.
+
+### Java editor test gutter
+
+The plug-in contributes a dedicated ruler column to Eclipse's normal Java
+compilation-unit editor. Every detected JUnit test method gets a small green
+play triangle on the same source line:
+
+```java
+    ▶  @Test
+       public void shouldLoadAntrag() {
+           ...
+       }
+```
+
+(Visually the triangle is in Eclipse's left editor gutter, aligned with the
+test method line, like IntelliJ's gutter actions.)
+
+Clicking the triangle launches **that exact test method**, not the complete Flow
+and not the whole test file. It uses Eclipse's normal JUnit launch
+configuration, so the standard JUnit view still works.
+
+Unlike automatic/bulk Flow test execution, this is an explicit user action.
+Therefore the gutter is available for JUnit test methods even when the class is
+a JPA/integration-style test; the bulk `Run Unit Tests` safety exclusions remain
+unchanged.
+
+If the test file belongs to the current Flow, its gutter-run result is also
+captured by the existing Flow last-run/stack-trace summary. Running a test from
+an unrelated file does not overwrite the active Flow's stored summary.
+
+The gutter implementation is intentionally lightweight: it uses JDT's method
+model rather than an AST binding walk, caches the discovered source-line map,
+and debounces refreshes after document edits by 280 ms.
+
+The temporary `▶` labels introduced inside the Flow Explorer in 1.13.0 were
+removed; the play control now lives only where requested: beside test methods in
+the Java source editor.
+
+### Possible leaked test entities
+
+`Tx Lens` now also distinguishes **persistence-context cleanup** from
+**database-row cleanup**.
+
+This matters because:
+
+```java
+entityManager.persist(entity);
+entityManager.clear();
+```
+
+does *not* clean the database. `clear()` only detaches managed objects.
+
+The lens now labels direct operations such as:
+
+```text
+[DB CREATE]  EntityManager.persist(...)
+[DB DELETE]  EntityManager.remove(...)
+[PC RESET]   EntityManager.clear(...)
+```
+
+and can report:
+
+```text
+POSSIBLE DB LEAK:
+this test appears to create/persist an entity, but no visible cleanup
+registration or delete/remove is associated with it.
+```
+
+It also recognizes common cleanup-tracking helper names such as
+`persistEntity`, `registerEntity`, `trackEntity`, `addEntityForCleanup`, and
+`addTestEntity`. These are deliberately marked as heuristics because static
+analysis cannot prove what a custom helper really does.
+
+Entity-aware helper calls such as `createX(Entity)` / `saveX(Entity)` /
+`erstelleX(Entity)` can also be flagged as possible DB creates when JDT can
+resolve an `@Entity` type in their parameter or return types.
+
+`EntityManager.merge(...)` is called out separately because it may update an
+existing row or insert a new one.
+
+This is a **static leak-risk detector**, not a runtime database assertion.
+Inherited `@After`/teardown logic or a custom test superclass may clean rows
+outside the visible method, so the lens phrases these as warnings/hints rather
+than hard errors. Exact runtime leak proof would require project-specific DB
+instrumentation or a before/after database snapshot.
+
+Version 1.13.0 adds inline safe JUnit play actions and an on-demand
+transaction / persistence-context lens for tests.
+
+### Inline test play actions
+
+Safe unit-test rows in the Flow Explorer now start with a clickable play glyph:
+
+```text
+Tests
+  Impacted by DetailsichtController.java
+    speichern(...)
+      ▶  [DIRECT] DetailsichtControllerTest.java
+```
+
+The same play action is shown on failed/skipped test-class nodes from the last
+Flow test summary.
+
+Clicking the `▶` hot area runs only the selected safe JUnit test file/class
+through Eclipse's normal JUnit launcher and feeds its result back into the
+existing persisted Flow test summary/stack-trace view.
+
+The play glyph is intentionally **not** shown for Arquillian, generic
+integration, or JPA/persistence tests. The existing `Run Unit Tests` safety
+policy therefore remains unchanged. Test classification for painting/clicking
+is cached by file modification stamp (LRU, 384 files), so normal Flow refreshes
+do not repeatedly re-read unchanged test sources.
+
+### Transaction / Persistence Context Lens
+
+A new `Tx Lens` action analyzes the selected Flow test (or the active Java test
+editor) only when requested. It runs in a background Eclipse Job and does not
+add work to normal typing, saving, Flow selection, or test execution.
+
+The lens statically illustrates visible events such as:
+
+```text
+testFindAntrag(...)  (line 40)
+   42  [WRITE]     EntityManager.persist(...)
+   43  [FLUSH]     EntityManager.flush(...)
+   44  [PC RESET]  EntityManager.clear(...)
+   47  [READ]      EntityManager.find(...)
+```
+
+It recognizes `EntityManager` write/read/query/flush/clear operations,
+`EntityTransaction` / `UserTransaction` begin/commit/rollback calls, and common
+transaction annotations such as `@Transactional` and
+`@TransactionAttribute`.
+
+Because older test frameworks often wrap these operations in helpers, obvious
+helper names such as `renewPersistenceContext`, `flushAndClear`,
+`beginTransaction`, `commitTransaction`, etc. are also shown, but explicitly
+marked with `?` as heuristics rather than asserted facts.
+
+The lens gives guidance for common JPA-test mistakes, for example:
+
+- a write followed by a read/query in the same persistence context can be
+  satisfied by the managed object / first-level cache and therefore fail to
+  prove a true DB round-trip;
+- a visible PC reset after a write without an explicit flush deserves checking
+  because the framework may or may not flush at the intended boundary;
+- a manual transaction begin without a visible commit/rollback is called out;
+- when no explicit transaction boundary is visible, the lens explains that it
+  may be inherited or framework/superclass managed.
+
+These are deliberately **hints**, not Eclipse error markers, because static
+source analysis cannot prove container-managed transaction boundaries.
+
+Double-clicking an event in the lens jumps to the corresponding line in the
+test source.
 
 Version 1.12.9 adds semantic Entity detection and a performant architecture
 focus slice to the JSF Flow Explorer.

@@ -61,6 +61,12 @@ public final class FlowJavaSemantics {
         return semantics(file).repository;
     }
 
+    public static boolean isJaxb(
+            IFile file) {
+
+        return semantics(file).jaxb;
+    }
+
     public static void clear() {
         synchronized (CACHE) {
             CACHE.clear();
@@ -127,6 +133,7 @@ public final class FlowJavaSemantics {
         boolean managedBean = false;
         boolean service = false;
         boolean repository = false;
+        boolean jaxb = false;
 
         try {
             for (IType type :
@@ -162,6 +169,19 @@ public final class FlowJavaSemantics {
                     if ("Repository".equals(name)) {
                         repository = true;
                     }
+
+                    if ("XmlType".equals(name)
+                            || "XmlRootElement".equals(
+                                    name)
+                            || "XmlAccessorType".equals(
+                                    name)
+                            || "XmlEnum".equals(
+                                    name)
+                            || "XmlRegistry".equals(
+                                    name)) {
+
+                        jaxb = true;
+                    }
                 }
             }
 
@@ -173,7 +193,8 @@ public final class FlowJavaSemantics {
                 entity,
                 managedBean,
                 service,
-                repository);
+                repository,
+                jaxb);
     }
 
     private static String simpleName(
@@ -213,23 +234,27 @@ public final class FlowJavaSemantics {
                         false,
                         false,
                         false,
+                        false,
                         false);
 
         final boolean entity;
         final boolean managedBean;
         final boolean service;
         final boolean repository;
+        final boolean jaxb;
 
         Semantics(
                 boolean entity,
                 boolean managedBean,
                 boolean service,
-                boolean repository) {
+                boolean repository,
+                boolean jaxb) {
 
             this.entity = entity;
             this.managedBean = managedBean;
             this.service = service;
             this.repository = repository;
+            this.jaxb = jaxb;
         }
     }
 }

@@ -1,6 +1,7 @@
 package de.andre.jsfnavigation;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -228,9 +229,124 @@ public final class FlowDependencyIndexService {
             }
         }
 
+        addRelatedJaxbSchemas(
+                allowed,
+                files,
+                distances);
+
         return new FlowFocusResult(
                 rootPath,
                 distances);
+    }
+
+    private void addRelatedJaxbSchemas(
+            Set<String> allowed,
+            Map<String, IFile> files,
+            Map<String, Integer> distances) {
+
+        XsdIndexService xsd =
+                Activator.getXsdIndexService();
+
+        if (xsd == null
+                || distances.size()
+                        >= MAX_RELATED_FILES) {
+
+            return;
+        }
+
+        List<Map.Entry<String, Integer>> related =
+                new ArrayList<Map.Entry<String, Integer>>(
+                        distances.entrySet());
+
+        for (Map.Entry<String, Integer> item :
+                related) {
+
+            if (distances.size()
+                    >= MAX_RELATED_FILES) {
+
+                break;
+            }
+
+            IFile java =
+                    files.get(
+                            item.getKey());
+
+            if (java == null
+                    || !"java".equalsIgnoreCase(
+                            java.getFileExtension())
+                    || !FlowJavaSemantics
+                            .isJaxb(
+                                    java)) {
+
+                continue;
+            }
+
+            ICompilationUnit unit =
+                    JavaCore.createCompilationUnitFrom(
+                            java);
+
+            if (unit == null
+                    || !unit.exists()) {
+
+                continue;
+            }
+
+            try {
+                for (IType type :
+                        unit.getAllTypes()) {
+
+                    String[] names =
+                            JaxbTypeResolver
+                                    .jaxbNames(
+                                            type);
+
+                    for (String name :
+                            names) {
+
+                        String namespace =
+                                JaxbTypeResolver
+                                        .jaxbNamespace(
+                                                type,
+                                                name);
+
+                        for (XsdDefinition definition :
+                                xsd.resolve(
+                                        namespace,
+                                        name)) {
+
+                            String schemaPath =
+                                    definition
+                                            .getResourcePath();
+
+                            if (!allowed.contains(
+                                    schemaPath)
+                                    || distances
+                                            .containsKey(
+                                                    schemaPath)) {
+
+                                continue;
+                            }
+
+                            distances.put(
+                                    schemaPath,
+                                    Integer.valueOf(
+                                            item.getValue()
+                                                    .intValue()
+                                            + 1));
+
+                            if (distances.size()
+                                    >= MAX_RELATED_FILES) {
+
+                                return;
+                            }
+                        }
+                    }
+                }
+
+            } catch (JavaModelException e) {
+                // Flow schema enrichment is best effort only.
+            }
+        }
     }
 
     private void addIndexedJsfPages(

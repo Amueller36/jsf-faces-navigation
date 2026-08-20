@@ -61,6 +61,43 @@ public final class FlowTestClassifier {
         return UNIT_TEST;
     }
 
+
+    public static boolean isJUnitTestMethod(
+            IMethod method) {
+
+        if (method == null
+                || !method.exists()) {
+
+            return false;
+        }
+
+        if (hasTestAnnotation(
+                method)) {
+
+            return true;
+        }
+
+        /*
+         * JUnit 3 has no @Test annotation. Keep its conventional public
+         * testXxx() methods runnable in the editor gutter as well.
+         */
+        if (method.getElementName()
+                .startsWith("test")
+                && method.getNumberOfParameters()
+                        == 0) {
+
+            IType declaring =
+                    method.getDeclaringType();
+
+            return declaring != null
+                    && classify(
+                            declaring)
+                            != NOT_TEST;
+        }
+
+        return false;
+    }
+
     public static boolean isJUnitTestMethodOrType(
             IMethod method) {
 
@@ -70,7 +107,9 @@ public final class FlowTestClassifier {
             return false;
         }
 
-        if (hasTestAnnotation(method)) {
+        if (isJUnitTestMethod(
+                method)) {
+
             return true;
         }
 

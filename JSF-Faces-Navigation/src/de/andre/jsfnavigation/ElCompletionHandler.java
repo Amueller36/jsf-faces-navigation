@@ -14,7 +14,9 @@ import org.eclipse.core.resources.IFile;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.text.ITextOperationTarget;
 import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.window.Window;
 import org.eclipse.jdt.core.IField;
@@ -230,6 +232,33 @@ public final class ElCompletionHandler
             return;
         }
 
+        /*
+         * Prefer Eclipse/WTP's own content-assist UI. Our
+         * JsfMarkupContentAssistProcessor participates in that proposal list,
+         * so Ctrl+Alt+Space now behaves like normal Eclipse completion:
+         * popup anchored at the caret, type-to-filter, Enter/Tab selection,
+         * and coexistence with WTP's built-in proposals.
+         */
+        ITextOperationTarget operation =
+                (ITextOperationTarget)
+                        editor.getAdapter(
+                                ITextOperationTarget.class);
+
+        if (operation != null
+                && operation.canDoOperation(
+                        ISourceViewer.CONTENTASSIST_PROPOSALS)) {
+
+            operation.doOperation(
+                    ISourceViewer.CONTENTASSIST_PROPOSALS);
+
+            return;
+        }
+
+        /*
+         * Older/custom WTP editor configurations can theoretically omit the
+         * content-assistant operation. Keep the previous chooser as a safe
+         * fallback instead of making completion disappear.
+         */
         IFile file =
                 EditorContext.currentFile();
 

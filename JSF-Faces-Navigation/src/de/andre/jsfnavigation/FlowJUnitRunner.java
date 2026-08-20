@@ -19,6 +19,7 @@ import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.jdt.core.ICompilationUnit;
+import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
@@ -41,13 +42,108 @@ public final class FlowJUnitRunner {
     private static final long RESULT_WAIT_MILLIS =
             5000L;
 
+    private static final int SCOPE_FLOW = 1;
+    private static final int SCOPE_FILE = 2;
+    private static final int SCOPE_CLASS = 3;
+    private static final int SCOPE_METHOD = 4;
+
     private FlowJUnitRunner() {
     }
 
     public static void runCurrentFlowUnitTests() {
+        schedule(
+                new RunRequest(
+                        SCOPE_FLOW,
+                        null,
+                        null,
+                        null,
+                        "Run current-flow unit tests"));
+    }
+
+    public static void runTestFile(
+            IFile file) {
+
+        if (file == null
+                || !file.exists()) {
+
+            return;
+        }
+
+        schedule(
+                new RunRequest(
+                        SCOPE_FILE,
+                        file,
+                        null,
+                        null,
+                        "Run "
+                                + file.getName()));
+    }
+
+    public static void runTestClass(
+            IFile file,
+            String fullyQualifiedClassName) {
+
+        if (file == null
+                || !file.exists()) {
+
+            return;
+        }
+
+        schedule(
+                new RunRequest(
+                        SCOPE_CLASS,
+                        file,
+                        fullyQualifiedClassName,
+                        null,
+                        "Run "
+                                + simpleClassName(
+                                        fullyQualifiedClassName,
+                                        file.getName())));
+    }
+
+
+    public static void runExplicitTestMethod(
+            IFile file,
+            IMethod method) {
+
+        if (file == null
+                || !file.exists()
+                || method == null
+                || !method.exists()
+                || !FlowTestClassifier
+                        .isJUnitTestMethod(
+                                method)) {
+
+            return;
+        }
+
+        IType type =
+                method.getDeclaringType();
+
+        if (type == null
+                || !type.exists()) {
+
+            return;
+        }
+
+        schedule(
+                new RunRequest(
+                        SCOPE_METHOD,
+                        file,
+                        type.getFullyQualifiedName(),
+                        method.getElementName(),
+                        "Run "
+                                + type.getElementName()
+                                + "."
+                                + method.getElementName()));
+    }
+
+    private static void schedule(
+            final RunRequest request) {
+
         Job job =
                 new Job(
-                        "Run current-flow unit tests") {
+                        request.jobName) {
 
                     @Override
                     protected IStatus run(
@@ -62,213 +158,240 @@ public final class FlowJUnitRunner {
                             return Status.OK_STATUS;
                         }
 
-                        String flowName =
-                                service.getCurrentFlowName();
-
-                        long startedAt =
-                                System.currentTimeMillis();
-
                         Discovery discovery =
-                                discover(service);
+                                request.discover(
+                                        service);
 
                         if (discovery.unitTests.isEmpty()) {
-                            FlowTestRunSummary summary =
-                                    new FlowTestRunSummary(
-                                            flowName,
-                                            startedAt,
-                                            System.currentTimeMillis(),
-                                            0,
-                                            discovery.arquillianSkipped,
-                                            discovery.jpaSkipped,
-                                            discovery.integrationSkipped,
-                                            false,
-                                            new ArrayList<FlowTestCaseResult>());
-
-                            store(summary);
-
                             show(
-                                    "No safe JUnit unit tests found in the current flow."
+                                    request.emptyMessage()
                                     + skippedSuffix(
                                             discovery));
 
-                            FlowExplorerView.refreshIfOpen();
                             return Status.OK_STATUS;
                         }
 
-                        ILaunchManager manager =
-                                DebugPlugin.getDefault()
-                                        .getLaunchManager();
-
-                        ILaunchConfigurationType type =
-                                manager.getLaunchConfigurationType(
-                                        JUNIT_LAUNCH_TYPE);
-
-                        if (type == null) {
-                            show(
-                                    "Eclipse JUnit launch support is not installed.");
-                            return Status.OK_STATUS;
-                        }
-
-                        int completed = 0;
-
-                        List<FlowTestCaseResult> allResults =
-                                new ArrayList<FlowTestCaseResult>();
-
-                        for (TestType test :
-                                discovery.unitTests.values()) {
-
-                            if (monitor.isCanceled()) {
-                                break;
-                            }
-
-                            ILaunchConfiguration configuration =
-                                    null;
-
-                            FlowJUnitSessionCollector collector =
-                                    null;
-
-                            try {
-                                String baseName =
-                                        "JSF Flow - "
-                                        + test.type
-                                                .getElementName();
-
-                                String name =
-                                        manager.generateLaunchConfigurationName(
-                                                baseName);
-
-                                ILaunchConfigurationWorkingCopy wc =
-                                        type.newInstance(
-                                                null,
-                                                name);
-
-                                wc.setAttribute(
-                                        IJavaLaunchConfigurationConstants
-                                                .ATTR_PROJECT_NAME,
-                                        test.type
-                                                .getJavaProject()
-                                                .getElementName());
-
-                                wc.setAttribute(
-                                        IJavaLaunchConfigurationConstants
-                                                .ATTR_MAIN_TYPE_NAME,
-                                        test.type
-                                                .getFullyQualifiedName());
-
-                                wc.setAttribute(
-                                        ATTR_TEST_NAME,
-                                        "");
-
-                                wc.setAttribute(
-                                        ATTR_TEST_KIND,
-                                        FlowTestClassifier
-                                                .junitKind(
-                                                        test.type));
-
-                                configuration =
-                                        wc.doSave();
-
-                                collector =
-                                        new FlowJUnitSessionCollector(
-                                                name,
-                                                test.file
-                                                        .getFullPath()
-                                                        .toPortableString());
-
-                                JUnitCore.addTestRunListener(
-                                        collector);
-
-                                ILaunch launch =
-                                        configuration.launch(
-                                                ILaunchManager.RUN_MODE,
-                                                monitor);
-
-                                while (!launch.isTerminated()
-                                        && !monitor.isCanceled()) {
-
-                                    try {
-                                        Thread.sleep(150L);
-
-                                    } catch (InterruptedException e) {
-                                        Thread.currentThread()
-                                                .interrupt();
-                                        break;
-                                    }
-                                }
-
-                                /*
-                                 * JUnit model delivery can finish a fraction
-                                 * after the debug launch terminates. Wait a
-                                 * short bounded period so we copy the final
-                                 * test results/stack traces before moving on.
-                                 */
-                                collector.awaitFinished(
-                                        RESULT_WAIT_MILLIS);
-
-                                List<FlowTestCaseResult> classResults =
-                                        collector.snapshot();
-
-                                if (!collector.isMatched()) {
-                                    classResults.add(
-                                            unavailableResult(
-                                                    test,
-                                                    "Eclipse's JUnit result listener did not receive the test session."));
-                                }
-
-                                allResults.addAll(
-                                        classResults);
-
-                                completed++;
-
-                            } catch (Exception e) {
-                                allResults.add(
-                                        launchFailure(
-                                                test,
-                                                e));
-
-                            } finally {
-                                if (collector != null) {
-                                    JUnitCore.removeTestRunListener(
-                                            collector);
-                                }
-
-                                if (configuration != null) {
-                                    try {
-                                        configuration.delete();
-
-                                    } catch (Exception ignored) {
-                                        // Temporary launch config cleanup only.
-                                    }
-                                }
-                            }
-                        }
-
-                        FlowTestRunSummary summary =
-                                new FlowTestRunSummary(
-                                        flowName,
-                                        startedAt,
-                                        System.currentTimeMillis(),
-                                        completed,
-                                        discovery.arquillianSkipped,
-                                        discovery.jpaSkipped,
-                                        discovery.integrationSkipped,
-                                        monitor.isCanceled(),
-                                        allResults);
-
-                        store(summary);
-                        FlowExplorerView.refreshIfOpen();
-
-                        show(
-                                summaryMessage(
-                                        summary,
-                                        discovery));
-
-                        return Status.OK_STATUS;
+                        return execute(
+                                request,
+                                discovery,
+                                service,
+                                monitor);
                     }
                 };
 
         job.setUser(true);
         job.schedule();
+    }
+
+    private static IStatus execute(
+            RunRequest request,
+            Discovery discovery,
+            FlowExplorerService service,
+            IProgressMonitor monitor) {
+
+        String flowName =
+                service.getCurrentFlowName();
+
+        long startedAt =
+                System.currentTimeMillis();
+
+        ILaunchManager manager =
+                DebugPlugin.getDefault()
+                        .getLaunchManager();
+
+        ILaunchConfigurationType type =
+                manager.getLaunchConfigurationType(
+                        JUNIT_LAUNCH_TYPE);
+
+        if (type == null) {
+            show(
+                    "Eclipse JUnit launch support is not installed.");
+            return Status.OK_STATUS;
+        }
+
+        int completed = 0;
+
+        List<FlowTestCaseResult> allResults =
+                new ArrayList<FlowTestCaseResult>();
+
+        for (TestType test :
+                discovery.unitTests.values()) {
+
+            if (monitor.isCanceled()) {
+                break;
+            }
+
+            ILaunchConfiguration configuration =
+                    null;
+
+            FlowJUnitSessionCollector collector =
+                    null;
+
+            try {
+                String baseName =
+                        "JSF Flow - "
+                        + test.type
+                                .getElementName();
+
+                String name =
+                        manager.generateLaunchConfigurationName(
+                                baseName);
+
+                ILaunchConfigurationWorkingCopy wc =
+                        type.newInstance(
+                                null,
+                                name);
+
+                wc.setAttribute(
+                        IJavaLaunchConfigurationConstants
+                                .ATTR_PROJECT_NAME,
+                        test.type
+                                .getJavaProject()
+                                .getElementName());
+
+                wc.setAttribute(
+                        IJavaLaunchConfigurationConstants
+                                .ATTR_MAIN_TYPE_NAME,
+                        test.type
+                                .getFullyQualifiedName());
+
+                wc.setAttribute(
+                        ATTR_TEST_NAME,
+                        test.testName);
+
+                wc.setAttribute(
+                        ATTR_TEST_KIND,
+                        FlowTestClassifier
+                                .junitKind(
+                                        test.type));
+
+                configuration =
+                        wc.doSave();
+
+                collector =
+                        new FlowJUnitSessionCollector(
+                                name,
+                                test.file
+                                        .getFullPath()
+                                        .toPortableString());
+
+                JUnitCore.addTestRunListener(
+                        collector);
+
+                ILaunch launch =
+                        configuration.launch(
+                                ILaunchManager.RUN_MODE,
+                                monitor);
+
+                while (!launch.isTerminated()
+                        && !monitor.isCanceled()) {
+
+                    try {
+                        Thread.sleep(
+                                150L);
+
+                    } catch (InterruptedException e) {
+                        Thread.currentThread()
+                                .interrupt();
+                        break;
+                    }
+                }
+
+                collector.awaitFinished(
+                        RESULT_WAIT_MILLIS);
+
+                List<FlowTestCaseResult> classResults =
+                        collector.snapshot();
+
+                if (!collector.isMatched()) {
+                    classResults.add(
+                            unavailableResult(
+                                    test,
+                                    "Eclipse's JUnit result listener did not receive the test session."));
+                }
+
+                allResults.addAll(
+                        classResults);
+
+                completed++;
+
+            } catch (Exception e) {
+                allResults.add(
+                        launchFailure(
+                                test,
+                                e));
+
+            } finally {
+                if (collector != null) {
+                    JUnitCore.removeTestRunListener(
+                            collector);
+                }
+
+                if (configuration != null) {
+                    try {
+                        configuration.delete();
+
+                    } catch (Exception ignored) {
+                        // Temporary launch config cleanup only.
+                    }
+                }
+            }
+        }
+
+        FlowTestRunSummary summary =
+                new FlowTestRunSummary(
+                        flowName,
+                        startedAt,
+                        System.currentTimeMillis(),
+                        completed,
+                        discovery.arquillianSkipped,
+                        discovery.jpaSkipped,
+                        discovery.integrationSkipped,
+                        monitor.isCanceled(),
+                        allResults);
+
+        boolean belongsToCurrentFlow =
+                request.scope
+                        != SCOPE_METHOD
+                || service.containsFile(
+                        request.file);
+
+        if (belongsToCurrentFlow) {
+            store(summary);
+            FlowExplorerView.refreshIfOpen();
+        }
+
+        show(
+                request.scopeLabel()
+                + " "
+                + summaryState(summary)
+                + ": "
+                + summary.getPassedCount()
+                + " passed, "
+                + summary.getFailedCount()
+                + " failed, "
+                + summary.getSkippedCount()
+                + " skipped across "
+                + summary.getClassesRun()
+                + (summary.getClassesRun() == 1
+                        ? " class."
+                        : " classes.")
+                + skippedSuffix(
+                        discovery));
+
+        return Status.OK_STATUS;
+    }
+
+    private static String summaryState(
+            FlowTestRunSummary summary) {
+
+        if (summary.isCanceled()) {
+            return "CANCELED";
+        }
+
+        return summary.hasFailures()
+                ? "FAILED"
+                : "PASSED";
     }
 
     private static FlowTestCaseResult launchFailure(
@@ -337,37 +460,6 @@ public final class FlowJUnitRunner {
         }
     }
 
-    private static String summaryMessage(
-            FlowTestRunSummary summary,
-            Discovery discovery) {
-
-        String state;
-
-        if (summary.isCanceled()) {
-            state = "CANCELED";
-        } else if (summary.hasFailures()) {
-            state = "FAILED";
-        } else {
-            state = "PASSED";
-        }
-
-        return "Flow tests "
-                + state
-                + ": "
-                + summary.getPassedCount()
-                + " passed, "
-                + summary.getFailedCount()
-                + " failed, "
-                + summary.getSkippedCount()
-                + " skipped across "
-                + summary.getClassesRun()
-                + (summary.getClassesRun() == 1
-                        ? " class."
-                        : " classes.")
-                + skippedSuffix(
-                        discovery);
-    }
-
     private static Discovery discover(
             FlowExplorerService service) {
 
@@ -381,69 +473,107 @@ public final class FlowJUnitRunner {
             IFile file =
                     service.resolve(entry);
 
-            if (file == null
-                    || !"java".equalsIgnoreCase(
-                            file.getFileExtension())) {
-
-                continue;
-            }
-
-            ICompilationUnit unit =
-                    JavaCore.createCompilationUnitFrom(
-                            file);
-
-            if (unit == null
-                    || !unit.exists()) {
-
-                continue;
-            }
-
-            try {
-                for (IType type :
-                        unit.getAllTypes()) {
-
-                    if (type.getDeclaringType()
-                            != null) {
-
-                        continue;
-                    }
-
-                    int classification =
-                            FlowTestClassifier
-                                    .classify(type);
-
-                    if (classification
-                            == FlowTestClassifier.UNIT_TEST) {
-
-                        result.unitTests.put(
-                                type.getHandleIdentifier(),
-                                new TestType(
-                                        type,
-                                        file));
-
-                    } else if (classification
-                            == FlowTestClassifier.ARQUILLIAN_TEST) {
-
-                        result.arquillianSkipped++;
-
-                    } else if (classification
-                            == FlowTestClassifier.JPA_TEST) {
-
-                        result.jpaSkipped++;
-
-                    } else if (classification
-                            == FlowTestClassifier.INTEGRATION_TEST) {
-
-                        result.integrationSkipped++;
-                    }
-                }
-
-            } catch (JavaModelException e) {
-                // Skip malformed/incomplete test files.
-            }
+            discoverFile(
+                    file,
+                    null,
+                    result);
         }
 
         return result;
+    }
+
+    private static Discovery discoverFile(
+            IFile file,
+            String fullyQualifiedClassName) {
+
+        Discovery result =
+                new Discovery();
+
+        discoverFile(
+                file,
+                fullyQualifiedClassName,
+                result);
+
+        return result;
+    }
+
+    private static void discoverFile(
+            IFile file,
+            String fullyQualifiedClassName,
+            Discovery result) {
+
+        if (file == null
+                || !file.exists()
+                || !"java".equalsIgnoreCase(
+                        file.getFileExtension())) {
+
+            return;
+        }
+
+        ICompilationUnit unit =
+                JavaCore.createCompilationUnitFrom(
+                        file);
+
+        if (unit == null
+                || !unit.exists()) {
+
+            return;
+        }
+
+        try {
+            for (IType type :
+                    unit.getAllTypes()) {
+
+                if (type.getDeclaringType()
+                        != null) {
+
+                    continue;
+                }
+
+                if (fullyQualifiedClassName != null
+                        && !fullyQualifiedClassName
+                                .isEmpty()
+                        && !fullyQualifiedClassName
+                                .equals(
+                                        type.getFullyQualifiedName())) {
+
+                    continue;
+                }
+
+                int classification =
+                        FlowTestClassifier
+                                .classify(type);
+
+                if (classification
+                        == FlowTestClassifier.UNIT_TEST) {
+
+                    result.unitTests.put(
+                            type.getHandleIdentifier(),
+                            new TestType(
+                                    type,
+                                    file,
+                                    ""));
+
+                } else if (classification
+                        == FlowTestClassifier.ARQUILLIAN_TEST) {
+
+                    result.arquillianSkipped++;
+
+                } else if (classification
+                        == FlowTestClassifier.JPA_TEST) {
+
+                    result.jpaSkipped++;
+
+                } else if (classification
+                        == FlowTestClassifier.INTEGRATION_TEST) {
+
+                    result.integrationSkipped++;
+                }
+            }
+
+        } catch (JavaModelException e) {
+            // Skip malformed/incomplete test files.
+        }
     }
 
     private static String skippedSuffix(
@@ -533,17 +663,187 @@ public final class FlowJUnitRunner {
                 });
     }
 
+    private static String simpleClassName(
+            String fullyQualifiedClassName,
+            String fallback) {
+
+        if (fullyQualifiedClassName == null
+                || fullyQualifiedClassName
+                        .isEmpty()) {
+
+            return fallback;
+        }
+
+        int dot =
+                fullyQualifiedClassName
+                        .lastIndexOf('.');
+
+        return dot >= 0
+                ? fullyQualifiedClassName
+                        .substring(
+                                dot + 1)
+                : fullyQualifiedClassName;
+    }
+
+    private static final class RunRequest {
+
+        final int scope;
+        final IFile file;
+        final String fullyQualifiedClassName;
+        final String methodName;
+        final String jobName;
+
+        RunRequest(
+                int scope,
+                IFile file,
+                String fullyQualifiedClassName,
+                String methodName,
+                String jobName) {
+
+            this.scope = scope;
+            this.file = file;
+            this.fullyQualifiedClassName =
+                    fullyQualifiedClassName;
+            this.methodName =
+                    methodName;
+            this.jobName = jobName;
+        }
+
+        Discovery discover(
+                FlowExplorerService service) {
+
+            if (scope == SCOPE_FLOW) {
+                return FlowJUnitRunner
+                        .discover(service);
+            }
+
+            if (scope == SCOPE_METHOD) {
+                Discovery result =
+                        new Discovery();
+
+                ICompilationUnit unit =
+                        JavaCore.createCompilationUnitFrom(
+                                file);
+
+                if (unit == null
+                        || !unit.exists()) {
+
+                    return result;
+                }
+
+                try {
+                    for (IType type :
+                            unit.getAllTypes()) {
+
+                        if (type.getDeclaringType()
+                                != null
+                                || !fullyQualifiedClassName
+                                        .equals(
+                                                type.getFullyQualifiedName())) {
+
+                            continue;
+                        }
+
+                        result.unitTests.put(
+                                type.getHandleIdentifier()
+                                        + "#"
+                                        + methodName,
+                                new TestType(
+                                        type,
+                                        file,
+                                        methodName));
+
+                        break;
+                    }
+
+                } catch (JavaModelException e) {
+                    // Fall through with an empty discovery.
+                }
+
+                return result;
+            }
+
+            return discoverFile(
+                    file,
+                    scope == SCOPE_CLASS
+                            ? fullyQualifiedClassName
+                            : null);
+        }
+
+        String emptyMessage() {
+            if (scope == SCOPE_METHOD) {
+                return "Could not resolve this JUnit test method for launch.";
+            }
+
+            if (scope == SCOPE_CLASS) {
+                String reason =
+                        FlowTestLaunchSupport
+                                .blockedReason(
+                                        file,
+                                        fullyQualifiedClassName);
+
+                return reason.isEmpty()
+                        ? "No safe JUnit unit-test class was found."
+                        : reason;
+            }
+
+            if (scope == SCOPE_FILE) {
+                String reason =
+                        FlowTestLaunchSupport
+                                .blockedReason(
+                                        file,
+                                        null);
+
+                return reason.isEmpty()
+                        ? "No safe JUnit unit-test class was found in "
+                                + file.getName()
+                                + "."
+                        : reason;
+            }
+
+            return "No safe JUnit unit tests found in the current flow.";
+        }
+
+        String scopeLabel() {
+            if (scope == SCOPE_METHOD) {
+                return simpleClassName(
+                        fullyQualifiedClassName,
+                        file.getName())
+                        + "."
+                        + methodName;
+            }
+
+            if (scope == SCOPE_CLASS) {
+                return simpleClassName(
+                        fullyQualifiedClassName,
+                        file.getName());
+            }
+
+            if (scope == SCOPE_FILE) {
+                return file.getName();
+            }
+
+            return "Flow tests";
+        }
+    }
+
     private static final class TestType {
 
         final IType type;
         final IFile file;
+        final String testName;
 
         TestType(
                 IType type,
-                IFile file) {
+                IFile file,
+                String testName) {
 
             this.type = type;
             this.file = file;
+            this.testName =
+                    testName == null
+                            ? ""
+                            : testName;
         }
     }
 

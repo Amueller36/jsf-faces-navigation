@@ -80,6 +80,8 @@ public final class FlowExplorerView
                     FlowCategoryClassifier.ISP,
                     FlowCategoryClassifier.SERVICE,
                     FlowCategoryClassifier.PERSISTENCE,
+                    FlowCategoryClassifier.JAXB,
+                    FlowCategoryClassifier.SCHEMA,
                     FlowCategoryClassifier.RESOURCE,
                     FlowCategoryClassifier.TEST,
                     FlowCategoryClassifier.OTHER
@@ -102,6 +104,10 @@ public final class FlowExplorerView
     private FlowFocusResult architectureFocus;
     private boolean focusLoading;
     private Color focusDimColor;
+
+    private String flowFilterText = "";
+    private FlowFilterMatcher flowFilter =
+            FlowFilterMatcher.compile("");
 
     @Override
     public void createPartControl(
@@ -154,7 +160,9 @@ private void createHeader(
     createFlowRow(header);
     createPrimaryActionsRow(header);
     createSecondaryActionsRow(header);
+    createFilterActionsRow(header);
     createTestActionsRow(header);
+    createTestInsightActionsRow(header);
 
     summaryLabel =
             new Label(
@@ -409,13 +417,55 @@ private void createSecondaryActionsRow(
 }
 
 
+
+private void createFilterActionsRow(
+        Composite parent) {
+
+    Composite row =
+            actionRow(
+                    parent,
+                    2);
+
+    Button filter =
+            actionButton(
+                    row,
+                    "Filter…",
+                    "Filter Flow entries by case-insensitive text, re:regex, or /regex/. Ctrl+F works while the Flow tree is focused.");
+
+    filter.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    openFlowFilterDialog();
+                }
+            });
+
+    Button clear =
+            actionButton(
+                    row,
+                    "Clear Filter",
+                    "Remove the current Flow Explorer text/regex filter.");
+
+    clear.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    clearFlowFilter();
+                }
+            });
+}
+
 private void createTestActionsRow(
         Composite parent) {
 
     Composite row =
             actionRow(
                     parent,
-                    3);
+                    2);
 
     autoTestsButton =
             new Button(
@@ -466,6 +516,32 @@ private void createTestActionsRow(
 
                     FlowJUnitRunner
                             .runCurrentFlowUnitTests();
+                }
+            });
+
+}
+
+private void createTestInsightActionsRow(
+        Composite parent) {
+
+    Composite row =
+            actionRow(
+                    parent,
+                    2);
+
+    Button txLens =
+            actionButton(
+                    row,
+                    "Tx Lens",
+                    "Analyze the selected/active JUnit test for visible transaction and persistence-context boundaries. Runs only on demand.");
+
+    txLens.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    openTransactionLens();
                 }
             });
 
@@ -584,9 +660,20 @@ private Button actionButton(
                                 if (e.keyCode == SWT.DEL) {
                                     removeSelected();
                                     e.doit = false;
+                                    return;
+                                }
+
+                                if ((e.stateMask
+                                        & SWT.CTRL) != 0
+                                        && (e.keyCode == 'f'
+                                                || e.keyCode == 'F')) {
+
+                                    openFlowFilterDialog();
+                                    e.doit = false;
                                 }
                             }
                         });
+
 
         viewer.addSelectionChangedListener(
                 new ISelectionChangedListener() {
@@ -787,8 +874,10 @@ private Button actionButton(
                 CATEGORY_ORDER) {
 
             List<FlowEntry> entries =
-                    service.entriesForCategory(
-                            category);
+                    filteredEntries(
+                            service,
+                            service.entriesForCategory(
+                                    category));
 
             if (FlowCategoryClassifier.TEST.equals(
                     category)) {
@@ -797,7 +886,10 @@ private Button actionButton(
                         FlowImpactTreeBuilder
                                 .build(entries);
 
-                if (lastRun != null) {
+                if (lastRun != null
+                        && (!flowFilter.isActive()
+                                || !entries.isEmpty())) {
+
                     children.add(
                             0,
                             new FlowTestRunNode(
@@ -805,7 +897,8 @@ private Button actionButton(
                 }
 
                 if (!entries.isEmpty()
-                        || lastRun != null) {
+                        || (lastRun != null
+                                && !flowFilter.isActive())) {
 
                     result.add(
                             new FlowCategoryNode(
@@ -827,6 +920,93 @@ private Button actionButton(
 
 
 
+
+
+    private void openFlowFilterDialog() {
+        InputDialog dialog =
+                new InputDialog(
+                        getSite().getShell(),
+                        "Filter JSF Flow Explorer",
+                        "Text filter (case-insensitive), re:<regex>, or /<regex>/:",
+                        flowFilterText,
+                        null);
+
+        if (dialog.open()
+                != Window.OK) {
+
+            return;
+        }
+
+        String requested =
+                dialog.getValue() == null
+                        ? ""
+                        : dialog.getValue()
+                                .trim();
+
+        FlowFilterMatcher candidate =
+                FlowFilterMatcher.compile(
+                        requested);
+
+        if (!candidate.isValid()) {
+            MessageDialog.openError(
+                    getSite().getShell(),
+                    "Invalid Flow Filter Regex",
+                    candidate.getError());
+
+            return;
+        }
+
+        flowFilterText = requested;
+        flowFilter = candidate;
+
+        refresh();
+    }
+
+    private void clearFlowFilter() {
+        if (!flowFilter.isActive()) {
+            return;
+        }
+
+        flowFilterText = "";
+        flowFilter =
+                FlowFilterMatcher.compile("");
+
+        refresh();
+    }
+
+    private List<FlowEntry> filteredEntries(
+            FlowExplorerService service,
+            List<FlowEntry> entries) {
+
+        if (!flowFilter.isActive()
+                || entries == null
+                || entries.isEmpty()) {
+
+            return entries;
+        }
+
+        List<FlowEntry> result =
+                new ArrayList<FlowEntry>();
+
+        for (FlowEntry entry :
+                entries) {
+
+            IFile file =
+                    service == null
+                            ? null
+                            : service.resolve(
+                                    entry);
+
+            if (flowFilter.matches(
+                    entry,
+                    file)) {
+
+                result.add(entry);
+            }
+        }
+
+        return result;
+    }
 
     private void updateSummaryLabel(
             FlowExplorerService service,
@@ -851,6 +1031,16 @@ private Button actionButton(
                         service.isAutoCapture()
                                 ? " • automatic capture on"
                                 : " • manual capture");
+
+        if (flowFilter.isActive()) {
+            text.append(" • filter: ")
+                    .append(
+                            flowFilter.isRegex()
+                                    ? "regex "
+                                    : "")
+                    .append(
+                            flowFilterText);
+        }
 
         if (architectureFocus != null) {
             IFile root =
@@ -1188,6 +1378,8 @@ private Button actionButton(
                 && ("java".equalsIgnoreCase(
                         file.getFileExtension())
                         || FlowCategoryClassifier.VIEW.equals(
+                                entry.getCategory())
+                        || FlowCategoryClassifier.SCHEMA.equals(
                                 entry.getCategory()));
     }
 
@@ -1905,6 +2097,169 @@ private Button actionButton(
         }
     }
 
+
+
+
+    private void openTransactionLens() {
+        final IFile file =
+                selectedTestFile();
+
+        if (file == null
+                || !file.exists()
+                || !"java".equalsIgnoreCase(
+                        file.getFileExtension())) {
+
+            WebSphereStatusLine.show(
+                    "Select a Java test file/class in the Flow Explorer, or open a Java test in the editor, before using Tx Lens.");
+
+            return;
+        }
+
+        Job job =
+                new Job(
+                        "Analyze test transaction boundaries") {
+
+                    @Override
+                    protected IStatus run(
+                            IProgressMonitor monitor) {
+
+                        final FlowTransactionLensReport report =
+                                FlowTransactionLensAnalyzer
+                                        .analyze(
+                                                file,
+                                                monitor);
+
+                        if (monitor.isCanceled()) {
+                            return Status.CANCEL_STATUS;
+                        }
+
+                        PlatformUI.getWorkbench()
+                                .getDisplay()
+                                .asyncExec(
+                                        new Runnable() {
+                                            @Override
+                                            public void run() {
+
+                                                if (viewer == null
+                                                        || viewer.getControl()
+                                                                .isDisposed()) {
+
+                                                    return;
+                                                }
+
+                                                FlowTransactionLensDialog dialog =
+                                                        new FlowTransactionLensDialog(
+                                                                getSite()
+                                                                        .getShell(),
+                                                                report);
+
+                                                dialog.open();
+                                            }
+                                        });
+
+                        return Status.OK_STATUS;
+                    }
+                };
+
+        job.setUser(true);
+        job.schedule();
+    }
+
+    private IFile selectedTestFile() {
+        if (viewer != null
+                && !viewer.getControl()
+                        .isDisposed()) {
+
+            Object first =
+                    viewer.getStructuredSelection()
+                            .getFirstElement();
+
+            IFile selected =
+                    testFileForElement(
+                            first);
+
+            if (selected != null) {
+                return selected;
+            }
+
+            if (first
+                    instanceof FlowTestResultCaseNode) {
+
+                return fileForResourcePath(
+                        ((FlowTestResultCaseNode)
+                                first)
+                                .getResult()
+                                .getTestFilePath());
+            }
+
+            if (first
+                    instanceof FlowStackTraceNode) {
+
+                return fileForResourcePath(
+                        ((FlowStackTraceNode)
+                                first)
+                                .getResult()
+                                .getTestFilePath());
+            }
+        }
+
+        IFile active =
+                EditorContext.currentFile();
+
+        return active != null
+                && active.exists()
+                && "java".equalsIgnoreCase(
+                        active.getFileExtension())
+                        ? active
+                        : null;
+    }
+
+    private IFile testFileForElement(
+            Object element) {
+
+        if (element instanceof FlowEntry) {
+            FlowEntry entry =
+                    (FlowEntry) element;
+
+            if (!FlowCategoryClassifier.TEST.equals(
+                    entry.getCategory())) {
+
+                return null;
+            }
+
+            FlowExplorerService current =
+                    service();
+
+            return current == null
+                    ? null
+                    : current.resolve(
+                            entry);
+        }
+
+        if (element
+                instanceof FlowImpactTestNode) {
+
+            FlowExplorerService current =
+                    service();
+
+            return current == null
+                    ? null
+                    : current.resolve(
+                            ((FlowImpactTestNode) element)
+                                    .getEntry());
+        }
+
+        if (element
+                instanceof FlowTestResultClassNode) {
+
+            return fileForResourcePath(
+                    ((FlowTestResultClassNode)
+                            element)
+                            .getTestFilePath());
+        }
+
+        return null;
+    }
 
     private void clearTestResults() {
         FlowExplorerService flow =

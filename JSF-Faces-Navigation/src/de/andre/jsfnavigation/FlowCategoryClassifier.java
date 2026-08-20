@@ -11,6 +11,8 @@ public final class FlowCategoryClassifier {
     public static final String ISP = "ISP";
     public static final String SERVICE = "Service";
     public static final String PERSISTENCE = "Persistence";
+    public static final String JAXB = "JAXB";
+    public static final String SCHEMA = "Schema";
     public static final String RESOURCE = "Resources";
     public static final String TEST = "Tests";
     public static final String OTHER = "Other";
@@ -36,6 +38,10 @@ public final class FlowCategoryClassifier {
             return VIEW;
         }
 
+        if (lower.endsWith(".xsd")) {
+            return SCHEMA;
+        }
+
         if (lower.endsWith(".properties")
                 || lower.endsWith(".xml")
                 || lower.endsWith(".css")
@@ -56,6 +62,10 @@ public final class FlowCategoryClassifier {
                 || path.indexOf("src/integration") >= 0) {
 
             return TEST;
+        }
+
+        if (FlowJavaSemantics.isJaxb(file)) {
+            return JAXB;
         }
 
         if (name.endsWith("Controller.java")) {

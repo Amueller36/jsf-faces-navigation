@@ -17,6 +17,28 @@
             name="PrimeFaces JavaScript Navigation"
             targetId="org.eclipse.jdt.ui.javaCode">
       </hyperlinkDetector>
+
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.JaxbJavaHyperlinkDetector"
+            id="de.andre.jsfnavigation.jaxbJavaHyperlinkDetector.java"
+            name="JAXB / XSD Navigation"
+            targetId="org.eclipse.jdt.ui.javaCode">
+      </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.XsdHyperlinkDetector"
+            id="de.andre.jsfnavigation.xsdHyperlinkDetector.xml"
+            name="XSD / JAXB Navigation"
+            targetId="org.eclipse.wst.xml.core.xmlsource">
+      </hyperlinkDetector>
+      <hyperlinkDetector
+            activate="true"
+            class="de.andre.jsfnavigation.XsdHyperlinkDetector"
+            id="de.andre.jsfnavigation.xsdHyperlinkDetector.xsd"
+            name="XSD / JAXB Navigation"
+            targetId="org.eclipse.wst.xsd.core.xsdsource">
+      </hyperlinkDetector>
       <hyperlinkDetector
             activate="true"
             class="de.andre.jsfnavigation.JpaQueryHyperlinkDetector"
@@ -38,6 +60,48 @@
             name="PrimeFaces / RichFaces / JSF String Navigation"
             targetId="org.eclipse.jdt.ui.javaCode">
       </hyperlinkDetector>
+   </extension>
+
+
+
+   <extension
+         point="org.eclipse.wst.sse.ui.editorConfiguration">
+      <provisionalConfiguration
+            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
+            target="org.eclipse.wst.xml.XML_DEFAULT"
+            type="contentassistprocessor">
+      </provisionalConfiguration>
+      <provisionalConfiguration
+            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
+            target="org.eclipse.wst.html.HTML_DEFAULT"
+            type="contentassistprocessor">
+      </provisionalConfiguration>
+      <provisionalConfiguration
+            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
+            target="org.eclipse.wst.sse.ST_DEFAULT"
+            type="contentassistprocessor">
+      </provisionalConfiguration>
+   </extension>
+
+   <extension
+         point="org.eclipse.ui.workbench.texteditor.rulerColumns">
+      <column
+            class="de.andre.jsfnavigation.JavaTestRunRulerColumn"
+            enabled="true"
+            global="true"
+            id="de.andre.jsfnavigation.columns.junitRun"
+            includeInMenu="true"
+            name="JUnit Run">
+         <targetEditor
+               id="org.eclipse.jdt.ui.CompilationUnitEditor">
+         </targetEditor>
+         <placement
+               gravity="0.85">
+            <after
+                  id="org.eclipse.ui.editors.columns.annotations">
+            </after>
+         </placement>
+      </column>
    </extension>
 
    <extension
@@ -180,6 +244,15 @@
             id="de.andre.jsfnavigation.command.componentHelp"
             name="JSF Component / Attribute Help">
       </command>
+
+      <command
+            categoryId="de.andre.jsfnavigation.commands.category"
+            defaultHandler="de.andre.jsfnavigation.GenerateTestHelperHandler"
+            description="Analyze the selected Java method and generate a copy/paste Mockito or JPA test helper."
+            id="de.andre.jsfnavigation.command.generateTestHelper"
+            name="Generate Test Helper...">
+      </command>
+
       <command
             categoryId="de.andre.jsfnavigation.commands.category"
             defaultHandler="de.andre.jsfnavigation.ToggleXhtmlCommentHandler"
@@ -302,6 +375,28 @@
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="M1+/">
       </key>
+   </extension>
+
+
+   <extension
+         point="org.eclipse.ui.menus">
+      <menuContribution
+            locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <command
+               commandId="de.andre.jsfnavigation.command.generateTestHelper"
+               label="Generate Test Helper..."
+               style="push">
+            <visibleWhen
+                  checkEnabled="false">
+               <with
+                     variable="activeEditorId">
+                  <equals
+                        value="org.eclipse.jdt.ui.CompilationUnitEditor">
+                  </equals>
+               </with>
+            </visibleWhen>
+         </command>
+      </menuContribution>
    </extension>
 
    <extension

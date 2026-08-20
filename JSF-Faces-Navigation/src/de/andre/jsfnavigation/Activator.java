@@ -21,6 +21,7 @@ public final class Activator extends AbstractUIPlugin {
     private FlowTestImpactService flowTestImpactService;
     private FlowTestResultStore flowTestResultStore;
     private FlowDependencyIndexService flowDependencyIndexService;
+    private XsdIndexService xsdIndexService;
     private SmartDeployMappingStore smartDeployMappingStore;
     private SmartDeployService smartDeployService;
     private WtpShortcutBridge wtpShortcutBridge;
@@ -63,6 +64,10 @@ public final class Activator extends AbstractUIPlugin {
                 .append("flow-test-results-v1.bin")
                 .toFile();
 
+        File xsdIndexFile = getStateLocation()
+                .append("xsd-index-v1.bin")
+                .toFile();
+
         beanIndexService = new BeanIndexService(beanIndexFile);
         beanIndexService.start();
 
@@ -103,6 +108,11 @@ public final class Activator extends AbstractUIPlugin {
                 new FlowDependencyIndexService();
         flowDependencyIndexService.start();
 
+        xsdIndexService =
+                new XsdIndexService(
+                        xsdIndexFile);
+        xsdIndexService.start();
+
         flowTestImpactService =
                 new FlowTestImpactService();
         flowTestImpactService.start();
@@ -134,6 +144,11 @@ public final class Activator extends AbstractUIPlugin {
             if (flowDependencyIndexService != null) {
                 flowDependencyIndexService.stop();
                 flowDependencyIndexService = null;
+            }
+
+            if (xsdIndexService != null) {
+                xsdIndexService.stop();
+                xsdIndexService = null;
             }
 
             if (flowExplorerService != null) {
@@ -184,6 +199,8 @@ public final class Activator extends AbstractUIPlugin {
             JavaPropertyResolver.clearCache();
             JavaReturnTypeResolver.clearCache();
             FlowJavaSemantics.clear();
+            FlowTestLaunchSupport.clear();
+            JaxbTypeResolver.clearCache();
         } finally {
             instance = null;
             super.stop(context);
@@ -219,6 +236,11 @@ public final class Activator extends AbstractUIPlugin {
         return plugin == null ? null : plugin.flowExplorerService;
     }
 
+
+    public static XsdIndexService getXsdIndexService() {
+        Activator plugin = instance;
+        return plugin == null ? null : plugin.xsdIndexService;
+    }
 
     public static FlowDependencyIndexService getFlowDependencyIndexService() {
         Activator plugin = instance;

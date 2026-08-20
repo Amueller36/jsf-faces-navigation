@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.12.9 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.13.3 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -1621,3 +1621,433 @@ Focus calculation is deliberately bounded and asynchronous:
 
 So the first focus on a code path may parse its reachable classes; switching
 between already-seen controllers should mostly be cache/BFS work.
+
+---
+
+## 1.13.0 Inline test play buttons + Tx Lens
+
+### Run one test class/file from the Flow Explorer
+
+Safe unit tests show:
+
+```text
+▶  MyControllerTest.java
+```
+
+The `▶` at the beginning of the row is clickable. Hovering it changes to the
+hand cursor and shows a Run tooltip.
+
+For impacted-test rows it appears together with caller distance:
+
+```text
+▶  [DIRECT] MyControllerTest.java
+▶  [3 calls away] NavigationTest.java
+```
+
+The same action is available on test-class nodes under the persisted last-run
+summary.
+
+A Flow test file containing more than one safe top-level JUnit class runs the
+safe classes from that file. Last-run result aggregation and stored stack traces
+work the same way as with `Run Unit Tests`.
+
+For safety, play actions are not offered for:
+
+```text
+Arquillian
+generic integration tests
+JPA / persistence tests
+```
+
+Their accidental execution policy is therefore unchanged.
+
+Play-button eligibility is cached by file modification stamp with an LRU cap of
+384 Java test files.
+
+### Tx Lens
+
+Select a test row/class in the Flow Explorer (or open a Java test in the active
+editor), then click:
+
+```text
+Tx Lens
+```
+
+The analysis is on-demand and runs in a background Job.
+
+Example:
+
+```text
+testLoad(...)  (line 35)
+
+   38  [WRITE]     EntityManager.persist(...)
+   39  [FLUSH]     EntityManager.flush(...)
+   40  [PC RESET]  EntityManager.clear(...)
+   43  [QUERY]     EntityManager.createNamedQuery(...)
+
+   HINT: ...
+```
+
+Recognized explicit events include:
+
+```text
+EntityManager.persist / merge / remove
+EntityManager.find / getReference / refresh
+EntityManager.createQuery / createNamedQuery / createNativeQuery
+EntityManager.flush
+EntityManager.clear / close
+EntityManager.detach
+EntityTransaction.begin / commit / rollback
+UserTransaction.begin / commit / rollback
+@Transactional
+@TransactionAttribute
+@Commit / @Rollback
+```
+
+Common helper-name conventions such as `renewPersistenceContext`,
+`flushAndClear`, `beginTransaction` and `commitTransaction` are displayed with
+`?` to show that they are heuristic clues.
+
+The lens intentionally gives hints rather than compiler-style errors. A
+container, test superclass, extension, or custom JPA test client can own a
+transaction boundary that is not visible in the test method itself.
+
+Double-click a numbered event line to jump to that source line.
+
+---
+
+## 1.13.1 Java editor test gutter + entity leak-risk detection
+
+### Play button beside each test method
+
+The standard Eclipse Java editor now gets a dedicated `JUnit Run` gutter
+column.
+
+For a JUnit method:
+
+```java
+@Test
+public void shouldCreateAntrag() {
+}
+```
+
+a green play triangle is drawn in the left gutter on the method's source line.
+
+Click it to launch **only that test method**.
+
+The gutter recognizes normal JUnit annotations plus JUnit 3 `testXxx()`
+methods. It uses the standard Eclipse JUnit launcher, so normal JUnit output is
+still available.
+
+The gutter is explicit/manual, so it is not restricted by the Flow bulk-run
+policy. `Run Unit Tests` in the Flow Explorer still excludes Arquillian,
+generic integration and JPA/persistence tests as before.
+
+Performance behavior:
+
+```text
+no workspace search
+no call hierarchy
+no AST binding graph
+cached method -> source-line map
+280 ms edit debounce
+recomputed only for the open Java editor when needed
+```
+
+The old Flow Explorer `▶` prefixes from 1.13.0 have been removed.
+
+### Entity cleanup / leak-risk checks in Tx Lens
+
+`Tx Lens` now separates persistence-context operations from actual database
+cleanup:
+
+```text
+[DB CREATE]  EntityManager.persist(...)
+[FLUSH]      EntityManager.flush(...)
+[PC RESET]   EntityManager.clear(...)
+[DB DELETE]  EntityManager.remove(...)
+```
+
+Important:
+
+```text
+PC RESET != DB DELETE
+```
+
+`clear()`, `close()`, `detach()` or a renewed persistence context can prevent
+first-level-cache effects, but they do not remove rows already persisted in the
+database.
+
+When a test appears to persist/create an entity without visible cleanup
+tracking or delete/remove logic, the lens shows a `POSSIBLE DB LEAK` hint.
+
+Common tracking helper names are recognized heuristically:
+
+```text
+persistEntity(...)
+persistTestEntity(...)
+registerEntity(...)
+trackEntity(...)
+addEntityForCleanup(...)
+addTestEntity(...)
+```
+
+Common cleanup helpers such as `deleteEntity`, `removeEntity`,
+`cleanupDatabase`, `deleteTestData`, etc. are also recognized heuristically.
+
+If JDT resolves an `@Entity` in a helper's parameter/return types, create-like
+methods (`persist*`, `insert*`, `create*`, `save*`, `erstelle*`, `anlegen*`)
+can be marked as possible DB creates.
+
+`EntityManager.merge(...)` is treated as a possible create because it may
+insert or update depending on entity state.
+
+These warnings are intentionally not hard errors: superclass teardown,
+framework-managed cleanup or custom helper internals may own the real cleanup.
+
+---
+
+## 1.13.2 Helper/superclass cleanup scan + Flow filters
+
+### Deeper persisted-entity cleanup scan
+
+`Tx Lens` now follows reachable helper implementations in workspace source.
+
+This works whether the helper is:
+
+```text
+same test class
+superclass / extended JPA test class
+another workspace helper called by either
+```
+
+The cleanup scan also inspects lifecycle cleanup methods in the test class and
+its superclasses:
+
+```text
+@After
+@AfterEach
+@AfterAll
+@AfterMethod
+@AfterTest
+tearDown()
+```
+
+Calls inside those methods are recursively followed, so a superclass
+`tearDown()` -> `cleanupDatabase()` -> `deleteEntity(...)` chain can be seen.
+
+The scan is bounded:
+
+```text
+depth      <= 5 helper calls
+methods    <= 60
+source CUs <= 18
+```
+
+and runs only when `Tx Lens` is requested.
+
+The leak detector deliberately distinguishes:
+
+```text
+cleanup exists somewhere
+```
+
+from:
+
+```text
+this exact newly persisted entity is visibly registered for cleanup
+```
+
+So a superclass teardown does not automatically suppress a leak warning for an
+untracked `EntityManager.persist(...)`.
+
+### Flow Explorer Filter
+
+Use the `Filter…` button or press:
+
+```text
+Ctrl+F
+```
+
+while the Flow tree is focused.
+
+Plain text is case-insensitive:
+
+```text
+antrag
+Controller
+some/package
+```
+
+Regex:
+
+```text
+re:.*Antrag.*(Bean|Controller)
+```
+
+or:
+
+```text
+/.*Antrag.*(Bean|Controller)/
+```
+
+Use `Clear Filter` to restore the complete Flow.
+
+The filter matches category, file name, project-relative path and full workspace
+resource path. It is in-memory only and does not trigger Java/JSF/workspace
+searches.
+
+---
+
+## 1.13.3 Test Helper Generator
+
+Right-click inside a Java method:
+
+```text
+Generate Test Helper...
+```
+
+The analysis runs only when requested.
+
+Profiles:
+
+```text
+1. Mockito mock helper method
+2. Mockito unit test scaffold
+3. JPA test scaffold
+```
+
+### Mockito mock helper
+
+Given a selected method that calls:
+
+```java
+userService.findUser(id);
+permissionService.check(user);
+```
+
+the helper can produce:
+
+```java
+@Mock
+private UserService userService;
+
+@Mock
+private PermissionService permissionService;
+
+private void mockLoadDependencies() {
+    when(userService.findUser(anyString()))
+        .thenReturn(/* TODO User */ null);
+
+    when(permissionService.check(any(User.class)))
+        .thenReturn(/* TODO boolean */ false);
+}
+```
+
+Void calls are listed as comments instead of adding meaningless `doNothing()`
+stubs.
+
+### Mockito unit scaffold
+
+Generates a larger copy/paste skeleton with:
+
+```text
+@Mock fields
+@InjectMocks subject
+@Test
+Arrange parameters
+when(...)
+Act
+assert...
+verify(...)
+```
+
+The generated `verify(...)` calls are intentionally annotated with comments so
+you keep them only when the interaction is actually part of the contract.
+
+### JPA scaffold
+
+JPA API usage (`EntityManager`, Query/TypedQuery, javax/jakarta persistence)
+makes JPA mode the default.
+
+The scaffold includes cleanup/transaction reminders:
+
+```text
+persist prerequisite rows via cleanup-tracked test helper
+flush + clear/renew PC when the assertion must prove a DB round trip
+never treat persistence-context clear as DB cleanup
+```
+
+### Dependency analysis
+
+The generator follows internal source helpers in:
+
+```text
+selected class
+superclasses
+```
+
+and collects field collaborators used by those paths.
+
+Safety/performance bounds:
+
+```text
+helper depth <= 4
+methods      <= 30
+source CUs   <= 12
+cycle prevention by JDT method handle
+background Eclipse Job
+```
+
+It does not perform a workspace-wide caller search.
+
+The dialog has a `Copy` button and never modifies source automatically.
+
+---
+
+## 1.14.0 additions: current package suggestions + native XHTML content assist
+
+### New test locations use `de.itzbund`
+
+When the production class is still under the old namespace:
+
+```text
+de.zivit....
+```
+
+the **new-test suggestion** is rewritten to:
+
+```text
+de.itzbund....
+```
+
+Only new suggested locations are affected. Existing tests are left untouched.
+
+### Native Eclipse popup for XHTML suggestions
+
+Inside `.xhtml`, use:
+
+```text
+Ctrl+Alt+Space
+```
+
+for the plug-in completion command, or normal:
+
+```text
+Ctrl+Space
+```
+
+The JSF/PrimeFaces/RichFaces tag/attribute suggestions participate in Eclipse
+WTP's own content-assist popup rather than opening a separate modal chooser.
+
+Benefits:
+
+```text
+caret-anchored popup
+normal Eclipse keyboard selection
+coexists with WTP proposals
+attribute insertion still places caret inside =""
+```
+
+The previous chooser remains a fallback only when the editor does not expose
+native content assist.
