@@ -1,6 +1,10 @@
 package de.andre.jsfnavigation;
 
+import java.text.SimpleDateFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import org.eclipse.core.resources.IFile;
@@ -11,6 +15,10 @@ import org.eclipse.core.resources.IResourceChangeListener;
 import org.eclipse.core.resources.IResourceDelta;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.viewers.IColorProvider;
@@ -25,8 +33,10 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.window.Window;
+import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IMethod;
+import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.KeyAdapter;
@@ -86,6 +96,12 @@ public final class FlowExplorerView
     private int treeFontDelta;
     private boolean suppressOpenOnSelection;
     private IResourceChangeListener problemMarkerListener;
+
+    private volatile int focusRequestGeneration;
+    private Job focusJob;
+    private FlowFocusResult architectureFocus;
+    private boolean focusLoading;
+    private Color focusDimColor;
 
     @Override
     public void createPartControl(
@@ -207,6 +223,9 @@ private void createFlowRow(
                             && flowCombo.getSelectionIndex()
                                     >= 0) {
 
+                        clearArchitectureFocus(
+                                false);
+
                         service.setCurrentFlow(
                                 flowCombo.getText());
 
@@ -321,7 +340,7 @@ private void createSecondaryActionsRow(
     Composite row =
             actionRow(
                     parent,
-                    3);
+                    4);
 
     Button openAll =
             actionButton(
@@ -370,6 +389,23 @@ private void createSecondaryActionsRow(
                     removeSelected();
                 }
             });
+
+    Button clearFocus =
+            actionButton(
+                    row,
+                    "Clear Focus",
+                    "Show every Flow entry normally again and remove the current architecture focus.");
+
+    clearFocus.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    clearArchitectureFocus(
+                            true);
+                }
+            });
 }
 
 
@@ -379,7 +415,7 @@ private void createTestActionsRow(
     Composite row =
             actionRow(
                     parent,
-                    2);
+                    3);
 
     autoTestsButton =
             new Button(
@@ -430,6 +466,22 @@ private void createTestActionsRow(
 
                     FlowJUnitRunner
                             .runCurrentFlowUnitTests();
+                }
+            });
+
+    Button clearResults =
+            actionButton(
+                    row,
+                    "Clear Results",
+                    "Clear the persisted last Flow test summary and stack traces for this flow.");
+
+    clearResults.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    clearTestResults();
                 }
             });
 }
@@ -515,8 +567,12 @@ private Button actionButton(
         viewer.setContentProvider(
                 new FlowContentProvider());
 
+        focusDimColor =
+                createFocusDimColor();
+
         viewer.setLabelProvider(
-                new FlowLabelProvider());
+                new FlowLabelProvider(
+                        this));
 
         viewer.getTree()
                 .addKeyListener(
@@ -557,8 +613,14 @@ private Button actionButton(
                                         .getFirstElement();
 
                         if (first instanceof FlowEntry) {
+                            FlowEntry entry =
+                                    (FlowEntry) first;
+
+                            requestArchitectureFocus(
+                                    entry);
+
                             openEntry(
-                                    (FlowEntry) first);
+                                    entry);
 
                         } else if (first
                                 instanceof FlowImpactTestNode) {
@@ -578,6 +640,24 @@ private Button actionButton(
 
                             openImpactMethod(
                                     (FlowImpactMethodNode) first);
+
+                        } else if (first
+                                instanceof FlowTestResultClassNode) {
+
+                            openTestResultClass(
+                                    (FlowTestResultClassNode) first);
+
+                        } else if (first
+                                instanceof FlowTestResultCaseNode) {
+
+                            openTestResultCase(
+                                    (FlowTestResultCaseNode) first);
+
+                        } else if (first
+                                instanceof FlowStackTraceNode) {
+
+                            openStackTrace(
+                                    (FlowStackTraceNode) first);
                         }
                     }
                 });
@@ -622,6 +702,14 @@ private Button actionButton(
             return;
         }
 
+        /*
+         * Semantic Java classification is modification-stamp cached, so this
+         * is cheap on normal refreshes and immediately moves newly annotated
+         * @Entity classes into Persistence without requiring an Eclipse
+         * restart.
+         */
+        service.reclassifyCurrentEntries();
+
         List<String> names =
                 service.getFlowNames();
 
@@ -659,14 +747,19 @@ private Button actionButton(
                         ? 0
                         : flow.getEntries().size();
 
-        summaryLabel.setText(
-                count
-                + (count == 1
-                        ? " file in current flow"
-                        : " files in current flow")
-                + (service.isAutoCapture()
-                        ? " • automatic capture on"
-                        : " • manual capture"));
+        if (architectureFocus != null
+                && (flow == null
+                        || !flow.contains(
+                                architectureFocus
+                                        .getRootResourcePath()))) {
+
+            clearArchitectureFocus(
+                    false);
+        }
+
+        updateSummaryLabel(
+                service,
+                count);
 
         viewer.setInput(
                 buildCategories(service));
@@ -681,6 +774,15 @@ private Button actionButton(
         List<FlowCategoryNode> result =
                 new ArrayList<FlowCategoryNode>();
 
+        FlowTestResultStore resultStore =
+                Activator.getFlowTestResultStore();
+
+        FlowTestRunSummary lastRun =
+                resultStore == null
+                        ? null
+                        : resultStore.get(
+                                service.getCurrentFlowName());
+
         for (String category :
                 CATEGORY_ORDER) {
 
@@ -688,23 +790,35 @@ private Button actionButton(
                     service.entriesForCategory(
                             category);
 
-            if (!entries.isEmpty()) {
-                if (FlowCategoryClassifier.TEST.equals(
-                        category)) {
+            if (FlowCategoryClassifier.TEST.equals(
+                    category)) {
+
+                List<Object> children =
+                        FlowImpactTreeBuilder
+                                .build(entries);
+
+                if (lastRun != null) {
+                    children.add(
+                            0,
+                            new FlowTestRunNode(
+                                    lastRun));
+                }
+
+                if (!entries.isEmpty()
+                        || lastRun != null) {
 
                     result.add(
                             new FlowCategoryNode(
                                     category,
                                     entries,
-                                    FlowImpactTreeBuilder
-                                            .build(entries)));
-
-                } else {
-                    result.add(
-                            new FlowCategoryNode(
-                                    category,
-                                    entries));
+                                    children));
                 }
+
+            } else if (!entries.isEmpty()) {
+                result.add(
+                        new FlowCategoryNode(
+                                category,
+                                entries));
             }
         }
 
@@ -713,6 +827,418 @@ private Button actionButton(
 
 
 
+
+    private void updateSummaryLabel(
+            FlowExplorerService service,
+            int count) {
+
+        if (summaryLabel == null
+                || summaryLabel.isDisposed()
+                || service == null) {
+
+            return;
+        }
+
+        StringBuilder text =
+                new StringBuilder();
+
+        text.append(count)
+                .append(
+                        count == 1
+                                ? " file in current flow"
+                                : " files in current flow")
+                .append(
+                        service.isAutoCapture()
+                                ? " • automatic capture on"
+                                : " • manual capture");
+
+        if (architectureFocus != null) {
+            IFile root =
+                    fileForResourcePath(
+                            architectureFocus
+                                    .getRootResourcePath());
+
+            String name =
+                    root != null
+                            && root.exists()
+                                    ? root.getName()
+                                    : architectureFocus
+                                            .getRootResourcePath();
+
+            text.append(" • focus: ")
+                    .append(name);
+
+            if (focusLoading) {
+                text.append(
+                        " (calculating...)");
+            } else {
+                int related =
+                        Math.max(
+                                0,
+                                architectureFocus
+                                        .getRelatedCount()
+                                - 1);
+
+                text.append(" (")
+                        .append(related)
+                        .append(
+                                related == 1
+                                        ? " related file)"
+                                        : " related files)");
+            }
+        }
+
+        summaryLabel.setText(
+                text.toString());
+
+        summaryLabel.getParent()
+                .layout(
+                        true,
+                        true);
+    }
+
+    private Color createFocusDimColor() {
+        if (viewer == null
+                || viewer.getTree()
+                        .isDisposed()) {
+
+            return null;
+        }
+
+        Color foreground =
+                viewer.getTree()
+                        .getForeground();
+
+        Color background =
+                viewer.getTree()
+                        .getBackground();
+
+        int red =
+                (foreground.getRed() * 40
+                        + background.getRed()
+                                * 60)
+                / 100;
+
+        int green =
+                (foreground.getGreen() * 40
+                        + background.getGreen()
+                                * 60)
+                / 100;
+
+        int blue =
+                (foreground.getBlue() * 40
+                        + background.getBlue()
+                                * 60)
+                / 100;
+
+        return new Color(
+                viewer.getTree()
+                        .getDisplay(),
+                red,
+                green,
+                blue);
+    }
+
+    private void requestArchitectureFocus(
+            FlowEntry entry) {
+
+        if (!isFocusRootEligible(
+                entry)) {
+
+            return;
+        }
+
+        FlowExplorerService flowService =
+                service();
+
+        FlowDependencyIndexService dependencyService =
+                Activator
+                        .getFlowDependencyIndexService();
+
+        if (flowService == null
+                || dependencyService == null) {
+
+            return;
+        }
+
+        IFile root =
+                flowService.resolve(
+                        entry);
+
+        if (root == null
+                || !root.exists()) {
+
+            return;
+        }
+
+        final String rootPath =
+                entry.getResourcePath();
+
+        if (architectureFocus != null
+                && rootPath.equals(
+                        architectureFocus
+                                .getRootResourcePath())
+                && !focusLoading) {
+
+            return;
+        }
+
+        if (focusJob != null) {
+            focusJob.cancel();
+            focusJob = null;
+        }
+
+        final int generation =
+                ++focusRequestGeneration;
+
+        Map<String, Integer> initial =
+                new LinkedHashMap<String, Integer>();
+
+        initial.put(
+                rootPath,
+                Integer.valueOf(0));
+
+        architectureFocus =
+                new FlowFocusResult(
+                        rootPath,
+                        initial);
+
+        focusLoading = true;
+
+        if (viewer != null
+                && !viewer.getControl()
+                        .isDisposed()) {
+
+            viewer.refresh();
+        }
+
+        final List<FlowEntry> snapshot =
+                flowService
+                        .getCurrentEntriesSnapshot();
+
+        int count =
+                snapshot.size();
+
+        updateSummaryLabel(
+                flowService,
+                count);
+
+        final IFile focusRoot =
+                root;
+
+        focusJob =
+                new Job(
+                        "Compute JSF Flow architecture focus") {
+
+                    @Override
+                    protected IStatus run(
+                            IProgressMonitor monitor) {
+
+                        final FlowFocusResult result =
+                                dependencyService.focus(
+                                        focusRoot,
+                                        snapshot,
+                                        monitor);
+
+                        if (monitor.isCanceled()) {
+                            return Status.CANCEL_STATUS;
+                        }
+
+                        PlatformUI.getWorkbench()
+                                .getDisplay()
+                                .asyncExec(
+                                        new Runnable() {
+                                            @Override
+                                            public void run() {
+
+                                                if (generation
+                                                        != focusRequestGeneration
+                                                        || viewer == null
+                                                        || viewer.getControl()
+                                                                .isDisposed()) {
+
+                                                    return;
+                                                }
+
+                                                architectureFocus =
+                                                        result;
+
+                                                focusLoading =
+                                                        false;
+
+                                                focusJob =
+                                                        null;
+
+                                                viewer.refresh();
+
+                                                FlowExplorerService currentService =
+                                                        service();
+
+                                                FlowDefinition currentFlow =
+                                                        currentService == null
+                                                                ? null
+                                                                : currentService
+                                                                        .getCurrentFlow();
+
+                                                updateSummaryLabel(
+                                                        currentService,
+                                                        currentFlow == null
+                                                                ? 0
+                                                                : currentFlow
+                                                                        .getEntries()
+                                                                        .size());
+                                            }
+                                        });
+
+                        return Status.OK_STATUS;
+                    }
+                };
+
+        focusJob.setSystem(true);
+
+        /*
+         * Tiny debounce: clicking through several files quickly should not
+         * start multiple AST/binding walks. The selected root is highlighted
+         * immediately while the final background request is pending.
+         */
+        focusJob.schedule(
+                180L);
+    }
+
+    private void clearArchitectureFocus(
+            boolean refreshViewer) {
+
+        focusRequestGeneration++;
+
+        if (focusJob != null) {
+            focusJob.cancel();
+            focusJob = null;
+        }
+
+        architectureFocus = null;
+        focusLoading = false;
+
+        if (refreshViewer
+                && viewer != null
+                && !viewer.getControl()
+                        .isDisposed()) {
+
+            viewer.refresh();
+
+            FlowExplorerService currentService =
+                    service();
+
+            FlowDefinition current =
+                    currentService == null
+                            ? null
+                            : currentService
+                                    .getCurrentFlow();
+
+            if (currentService != null) {
+                updateSummaryLabel(
+                        currentService,
+                        current == null
+                                ? 0
+                                : current.getEntries()
+                                        .size());
+            }
+        }
+    }
+
+    private boolean isFocusRootEligible(
+            FlowEntry entry) {
+
+        if (entry == null
+                || FlowCategoryClassifier.TEST.equals(
+                        entry.getCategory())
+                || FlowCategoryClassifier.RESOURCE.equals(
+                        entry.getCategory())) {
+
+            return false;
+        }
+
+        IFile file =
+                fileForResourcePath(
+                        entry.getResourcePath());
+
+        return file != null
+                && file.exists()
+                && "java".equalsIgnoreCase(
+                        file.getFileExtension());
+    }
+
+    private boolean isFocusStylingEligible(
+            FlowEntry entry) {
+
+        if (entry == null
+                || FlowCategoryClassifier.TEST.equals(
+                        entry.getCategory())
+                || FlowCategoryClassifier.RESOURCE.equals(
+                        entry.getCategory())) {
+
+            return false;
+        }
+
+        IFile file =
+                fileForResourcePath(
+                        entry.getResourcePath());
+
+        return file != null
+                && file.exists()
+                && ("java".equalsIgnoreCase(
+                        file.getFileExtension())
+                        || FlowCategoryClassifier.VIEW.equals(
+                                entry.getCategory()));
+    }
+
+    private boolean isFocusActive() {
+        return architectureFocus != null;
+    }
+
+    private boolean isFocusRoot(
+            String resourcePath) {
+
+        return architectureFocus != null
+                && resourcePath != null
+                && resourcePath.equals(
+                        architectureFocus
+                                .getRootResourcePath());
+    }
+
+    private boolean isFocusRelated(
+            String resourcePath) {
+
+        return architectureFocus != null
+                && resourcePath != null
+                && architectureFocus
+                        .isRelated(
+                                resourcePath);
+    }
+
+    private int relatedCount(
+            FlowCategoryNode category) {
+
+        if (category == null
+                || architectureFocus == null) {
+
+            return 0;
+        }
+
+        int count = 0;
+
+        for (FlowEntry entry :
+                category.getEntries()) {
+
+            if (architectureFocus
+                    .isRelated(
+                            entry.getResourcePath())) {
+
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     private void installProblemMarkerListener() {
         problemMarkerListener =
@@ -1379,6 +1905,179 @@ private Button actionButton(
         }
     }
 
+
+    private void clearTestResults() {
+        FlowExplorerService flow =
+                service();
+
+        FlowTestResultStore store =
+                Activator.getFlowTestResultStore();
+
+        if (flow == null
+                || store == null) {
+
+            return;
+        }
+
+        store.clear(
+                flow.getCurrentFlowName());
+
+        refresh();
+
+        WebSphereStatusLine.show(
+                "Cleared the last Flow test results.");
+    }
+
+    private void openTestResultClass(
+            FlowTestResultClassNode node) {
+
+        if (node == null) {
+            return;
+        }
+
+        openWorkspaceFile(
+                node.getTestFilePath());
+    }
+
+    private void openTestResultCase(
+            FlowTestResultCaseNode node) {
+
+        if (node == null) {
+            return;
+        }
+
+        FlowTestCaseResult result =
+                node.getResult();
+
+        String methodName =
+                result.getMethodName();
+
+        IFile file =
+                fileForResourcePath(
+                        result.getTestFilePath());
+
+        if (file == null
+                || !file.exists()) {
+
+            return;
+        }
+
+        if (methodName != null
+                && !methodName.isEmpty()
+                && !methodName.startsWith("<")) {
+
+            ICompilationUnit unit =
+                    JavaCore.createCompilationUnitFrom(
+                            file);
+
+            if (unit != null
+                    && unit.exists()) {
+
+                try {
+                    String wantedClass =
+                            result.getClassName();
+
+                    for (IType type :
+                            unit.getAllTypes()) {
+
+                        if (!wantedClass.isEmpty()
+                                && !wantedClass.equals(
+                                        type.getFullyQualifiedName())) {
+
+                            continue;
+                        }
+
+                        for (IMethod method :
+                                type.getMethods()) {
+
+                            if (methodName.equals(
+                                    method.getElementName())) {
+
+                                JavaEditorOpener.open(
+                                        method);
+                                return;
+                            }
+                        }
+                    }
+
+                } catch (Exception e) {
+                    // Fall back to opening the test source file.
+                }
+            }
+        }
+
+        openWorkspaceFile(
+                result.getTestFilePath());
+    }
+
+    private void openStackTrace(
+            FlowStackTraceNode node) {
+
+        if (node == null) {
+            return;
+        }
+
+        FlowStackTraceDialog dialog =
+                new FlowStackTraceDialog(
+                        getSite().getShell(),
+                        node.getResult());
+
+        dialog.open();
+    }
+
+    private void openWorkspaceFile(
+            String resourcePath) {
+
+        IFile file =
+                fileForResourcePath(
+                        resourcePath);
+
+        if (file == null
+                || !file.exists()) {
+
+            return;
+        }
+
+        try {
+            IWorkbenchWindow window =
+                    PlatformUI.getWorkbench()
+                            .getActiveWorkbenchWindow();
+
+            IWorkbenchPage page =
+                    window == null
+                            ? null
+                            : window.getActivePage();
+
+            if (page != null) {
+                IDE.openEditor(
+                        page,
+                        file,
+                        true);
+            }
+
+        } catch (Exception e) {
+            WebSphereStatusLine.show(
+                    "Could not open test source: "
+                    + e.getMessage());
+        }
+    }
+
+    private static IFile fileForResourcePath(
+            String resourcePath) {
+
+        if (resourcePath == null
+                || resourcePath.isEmpty()) {
+
+            return null;
+        }
+
+        return ResourcesPlugin.getWorkspace()
+                .getRoot()
+                .getFile(
+                        new org.eclipse.core.runtime.Path(
+                                resourcePath));
+    }
+
     private void openEntry(
             FlowEntry entry) {
 
@@ -1447,6 +2146,13 @@ private Button actionButton(
     public void dispose() {
         instance = null;
 
+        focusRequestGeneration++;
+
+        if (focusJob != null) {
+            focusJob.cancel();
+            focusJob = null;
+        }
+
         if (problemMarkerListener != null) {
             ResourcesPlugin.getWorkspace()
                     .removeResourceChangeListener(
@@ -1459,6 +2165,13 @@ private Button actionButton(
 
             treeZoomFont.dispose();
             treeZoomFont = null;
+        }
+
+        if (focusDimColor != null
+                && !focusDimColor.isDisposed()) {
+
+            focusDimColor.dispose();
+            focusDimColor = null;
         }
 
         super.dispose();
@@ -1564,6 +2277,42 @@ private Button actionButton(
                         .toArray();
             }
 
+            if (parentElement
+                    instanceof FlowTestRunNode) {
+
+                return ((FlowTestRunNode)
+                        parentElement)
+                        .getChildren()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowTestResultGroupNode) {
+
+                return ((FlowTestResultGroupNode)
+                        parentElement)
+                        .getClasses()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowTestResultClassNode) {
+
+                return ((FlowTestResultClassNode)
+                        parentElement)
+                        .getCases()
+                        .toArray();
+            }
+
+            if (parentElement
+                    instanceof FlowTestResultCaseNode) {
+
+                return ((FlowTestResultCaseNode)
+                        parentElement)
+                        .getChildren()
+                        .toArray();
+            }
+
             return new Object[0];
         }
 
@@ -1602,6 +2351,30 @@ private Button actionButton(
                         .isEmpty();
             }
 
+            if (element instanceof FlowTestRunNode) {
+                return !((FlowTestRunNode) element)
+                        .getChildren()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowTestResultGroupNode) {
+                return !((FlowTestResultGroupNode) element)
+                        .getClasses()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowTestResultClassNode) {
+                return !((FlowTestResultClassNode) element)
+                        .getCases()
+                        .isEmpty();
+            }
+
+            if (element instanceof FlowTestResultCaseNode) {
+                return !((FlowTestResultCaseNode) element)
+                        .getChildren()
+                        .isEmpty();
+            }
+
             return false;
         }
 
@@ -1620,6 +2393,14 @@ private Button actionButton(
     private static final class FlowLabelProvider
             extends LabelProvider
             implements IColorProvider {
+
+        private final FlowExplorerView owner;
+
+        FlowLabelProvider(
+                FlowExplorerView owner) {
+
+            this.owner = owner;
+        }
 
         @Override
         public String getText(
@@ -1640,12 +2421,30 @@ private Button actionButton(
                         && hasImpactGroups(
                                 category);
 
+                boolean focusCategory =
+                        owner.isFocusActive()
+                        && !FlowCategoryClassifier.TEST.equals(
+                                category.getName())
+                        && !FlowCategoryClassifier.RESOURCE.equals(
+                                category.getName());
+
+                int related =
+                        focusCategory
+                                ? owner.relatedCount(
+                                        category)
+                                : 0;
+
                 return category.getName()
                         + " ("
                         + category.getEntries().size()
                         + ")"
                         + (groupedTests
                                 ? "  [grouped by changed file]"
+                                : "")
+                        + (focusCategory
+                                ? "  ["
+                                        + related
+                                        + " related]"
                                 : "")
                         + (errors > 0
                                 ? "  ["
@@ -1732,6 +2531,142 @@ private Button actionButton(
                         + ")";
             }
 
+
+            if (element
+                    instanceof FlowTestRunNode) {
+
+                FlowTestRunSummary summary =
+                        ((FlowTestRunNode) element)
+                                .getSummary();
+
+                String state =
+                        summary.isCanceled()
+                                ? "CANCELED"
+                                : summary.hasFailures()
+                                        ? "FAILED"
+                                        : summary.getClassesRun() == 0
+                                                ? "NO TESTS"
+                                                : summary.getCaseCount() == 0
+                                                        ? "NO CASES"
+                                                        : "PASSED";
+
+                String time =
+                        new SimpleDateFormat(
+                                "dd MMM HH:mm")
+                                .format(
+                                        new Date(
+                                                summary.getFinishedAt()));
+
+                int excluded =
+                        summary.getArquillianSkipped()
+                        + summary.getJpaSkipped()
+                        + summary.getIntegrationSkipped();
+
+                return "Last run: "
+                        + state
+                        + " — "
+                        + time
+                        + "  ("
+                        + summary.getPassedCount()
+                        + " passed, "
+                        + summary.getFailedCount()
+                        + " failed, "
+                        + summary.getSkippedCount()
+                        + " skipped, "
+                        + summary.getClassesRun()
+                        + (summary.getClassesRun() == 1
+                                ? " class"
+                                : " classes")
+                        + (excluded > 0
+                                ? ", "
+                                        + excluded
+                                        + " excluded"
+                                : "")
+                        + ")";
+            }
+
+            if (element
+                    instanceof FlowTestResultGroupNode) {
+
+                FlowTestResultGroupNode group =
+                        (FlowTestResultGroupNode)
+                                element;
+
+                return (group.getKind()
+                        == FlowTestResultGroupNode.FAILED
+                                ? "Failed tests"
+                                : "Skipped tests")
+                        + "  ("
+                        + group.getCaseCount()
+                        + ")";
+            }
+
+            if (element
+                    instanceof FlowTestResultClassNode) {
+
+                FlowTestResultClassNode node =
+                        (FlowTestResultClassNode)
+                                element;
+
+                int count =
+                        node.getCases()
+                                .size();
+
+                return node.getSimpleClassName()
+                        + "  ("
+                        + count
+                        + (count == 1
+                                ? " case)"
+                                : " cases)");
+            }
+
+            if (element
+                    instanceof FlowTestResultCaseNode) {
+
+                FlowTestCaseResult result =
+                        ((FlowTestResultCaseNode)
+                                element)
+                                .getResult();
+
+                String prefix;
+
+                if (result.getStatus()
+                        == FlowTestCaseResult.FAILURE) {
+
+                    prefix = "✗ ";
+
+                } else if (result.getStatus()
+                        == FlowTestCaseResult.ERROR) {
+
+                    prefix = "! ";
+
+                } else if (result.getStatus()
+                        == FlowTestCaseResult.SKIPPED) {
+
+                    prefix = "○ ";
+
+                } else {
+                    prefix = "✓ ";
+                }
+
+                String firstLine =
+                        compactTraceLine(
+                                result.getFirstTraceLine());
+
+                return prefix
+                        + result.getMethodName()
+                        + (firstLine.isEmpty()
+                                ? ""
+                                : "  —  "
+                                        + firstLine);
+            }
+
+            if (element
+                    instanceof FlowStackTraceNode) {
+
+                return "Stack trace…  (click to open)";
+            }
+
             if (element
                     instanceof FlowEntry) {
 
@@ -1751,6 +2686,24 @@ private Button actionButton(
             return super.getText(element);
         }
 
+        private static String compactTraceLine(
+                String value) {
+
+            if (value == null) {
+                return "";
+            }
+
+            String text =
+                    value.trim();
+
+            return text.length() <= 140
+                    ? text
+                    : text.substring(
+                            0,
+                            137)
+                            + "...";
+        }
+
         private static boolean hasImpactGroups(
                 FlowCategoryNode category) {
 
@@ -1765,7 +2718,7 @@ private Button actionButton(
             return false;
         }
 
-        private static String flowEntryLabel(
+        private String flowEntryLabel(
                 FlowEntry entry,
                 int depth,
                 boolean showDepth) {
@@ -1785,6 +2738,33 @@ private Button actionButton(
             if (hasError(file)) {
                 label.append(
                         "[ERROR]  ");
+            }
+
+            if (owner.isFocusActive()
+                    && owner.isFocusStylingEligible(
+                            entry)) {
+
+                if (owner.isFocusRoot(
+                        entry.getResourcePath())) {
+
+                    label.append(
+                            "[FOCUS]  ");
+
+                } else if (owner.isFocusRelated(
+                        entry.getResourcePath())) {
+
+                    label.append(
+                            "•  ");
+                }
+            }
+
+            if (FlowCategoryClassifier.PERSISTENCE.equals(
+                    entry.getCategory())
+                    && FlowJavaSemantics.isEntity(
+                            file)) {
+
+                label.append(
+                        "[ENTITY]  ");
             }
 
             if (showDepth
@@ -1825,13 +2805,85 @@ private Button actionButton(
         public Color getForeground(
                 Object element) {
 
+            Display display =
+                    Display.getCurrent();
+
+            if (display == null) {
+                return null;
+            }
+
+            if (element instanceof FlowTestRunNode) {
+                FlowTestRunSummary summary =
+                        ((FlowTestRunNode) element)
+                                .getSummary();
+
+                if (summary.hasFailures()) {
+                    return display.getSystemColor(
+                            SWT.COLOR_RED);
+                }
+
+                if (summary.isSuccessful()) {
+                    return display.getSystemColor(
+                            SWT.COLOR_DARK_GREEN);
+                }
+
+                return null;
+            }
+
+            if (element instanceof FlowTestResultGroupNode) {
+                FlowTestResultGroupNode group =
+                        (FlowTestResultGroupNode)
+                                element;
+
+                return group.getKind()
+                        == FlowTestResultGroupNode.FAILED
+                                ? display.getSystemColor(
+                                        SWT.COLOR_RED)
+                                : null;
+            }
+
+            if (element instanceof FlowTestResultClassNode) {
+                FlowTestResultClassNode node =
+                        (FlowTestResultClassNode)
+                                element;
+
+                return node.getGroupKind()
+                        == FlowTestResultGroupNode.FAILED
+                                ? display.getSystemColor(
+                                        SWT.COLOR_RED)
+                                : null;
+            }
+
+            if (element instanceof FlowTestResultCaseNode) {
+                FlowTestCaseResult result =
+                        ((FlowTestResultCaseNode)
+                                element)
+                                .getResult();
+
+                if (result.isFailed()) {
+                    return display.getSystemColor(
+                            SWT.COLOR_RED);
+                }
+
+                return null;
+            }
+
+            if (element instanceof FlowStackTraceNode) {
+                return display.getSystemColor(
+                        SWT.COLOR_RED);
+            }
+
             boolean error = false;
 
             if (element instanceof FlowCategoryNode) {
+                FlowCategoryNode category =
+                        (FlowCategoryNode)
+                                element;
+
                 error =
-                        errorCount(
-                                (FlowCategoryNode)
-                                        element) > 0;
+                        errorCount(category) > 0
+                        || hasFailedRun(
+                                category);
 
             } else if (element
                     instanceof FlowEntry) {
@@ -1862,17 +2914,70 @@ private Button actionButton(
                                                 .getSourceResourcePath()));
             }
 
-            if (!error) {
-                return null;
+            if (error) {
+                return display.getSystemColor(
+                        SWT.COLOR_RED);
             }
 
-            Display display =
-                    Display.getCurrent();
+            if (owner.isFocusActive()) {
+                if (element
+                        instanceof FlowCategoryNode) {
 
-            return display == null
-                    ? null
-                    : display.getSystemColor(
-                            SWT.COLOR_RED);
+                    FlowCategoryNode category =
+                            (FlowCategoryNode)
+                                    element;
+
+                    if (!FlowCategoryClassifier.TEST.equals(
+                            category.getName())
+                            && !FlowCategoryClassifier.RESOURCE.equals(
+                                    category.getName())
+                            && owner.relatedCount(
+                                    category) == 0) {
+
+                        return owner.focusDimColor;
+                    }
+
+                } else if (element
+                        instanceof FlowEntry) {
+
+                    FlowEntry entry =
+                            (FlowEntry) element;
+
+                    if (owner.isFocusStylingEligible(
+                            entry)
+                            && !owner.isFocusRelated(
+                                    entry.getResourcePath())) {
+
+                        return owner.focusDimColor;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static boolean hasFailedRun(
+                FlowCategoryNode category) {
+
+            if (!FlowCategoryClassifier.TEST.equals(
+                    category.getName())) {
+
+                return false;
+            }
+
+            for (Object child :
+                    category.getChildren()) {
+
+                if (child instanceof FlowTestRunNode
+                        && ((FlowTestRunNode) child)
+                                .getSummary()
+                                .hasFailures()) {
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         @Override

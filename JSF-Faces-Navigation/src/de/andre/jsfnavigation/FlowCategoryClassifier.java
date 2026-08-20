@@ -74,6 +74,26 @@ public final class FlowCategoryClassifier {
             return TO;
         }
 
+        /*
+         * Older parts of the application do not always follow modern naming
+         * conventions. Let JDT annotations identify the architectural role as
+         * well, so e.g. @Entity class Antrag is still Persistence even though
+         * the class name does not end in "Entity".
+         */
+        if (FlowJavaSemantics.isEntity(file)
+                || FlowJavaSemantics.isRepository(file)) {
+
+            return PERSISTENCE;
+        }
+
+        if (FlowJavaSemantics.isService(file)) {
+            return SERVICE;
+        }
+
+        if (FlowJavaSemantics.isManagedBean(file)) {
+            return BEAN;
+        }
+
         if (name.endsWith("ISP.java")
                 || name.contains("ISP")) {
 

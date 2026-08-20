@@ -1,4 +1,4 @@
-# JSF / Java Navigation Plug-in 1.12.7 — Full Cheat Sheet
+# JSF / Java Navigation Plug-in 1.12.9 — Full Cheat Sheet
 
 ## Hotkeys
 
@@ -1447,3 +1447,177 @@ Each changed-method → test relationship stores its own shortest caller distanc
 
 Flow state format v4 persists these relationships and remains backward
 compatible with v1-v3 state files.
+
+---
+
+## 1.12.8 Combined Flow JUnit summary + persistent stack traces
+
+`Run Unit Tests` now produces one combined result overview even though safe
+JUnit classes continue to execute sequentially.
+
+A failed class does **not** stop the next class.
+
+The top of `Tests` shows the latest run:
+
+```text
+Last run: FAILED — 20 Aug 12:34
+38 passed • 2 failed • 1 skipped • 6 classes
+```
+
+Only the results that normally need attention are expanded below it:
+
+```text
+Failed tests (2)
+  AumiAntragBeanTest
+    ✗ shouldCreateAntrag() — AssertionError: ...
+      Stack trace… (click to open)
+
+Skipped tests (1)
+  SomeTest
+    ○ ignoredForNow()
+```
+
+Successful cases are represented by the aggregate passed count rather than
+filling the Flow tree with dozens of green rows.
+
+### Stack traces
+
+Select `Stack trace…` below a failed/error case to open a resizable, selectable
+and copyable full stack-trace dialog.
+
+Inside the dialog, double-click a normal Java stack frame such as:
+
+```text
+at de.example.AumiAntragBeanTest.shouldCreateAntrag(AumiAntragBeanTest.java:143)
+```
+
+to open the corresponding workspace source at that line.
+
+JUnit comparison failures also retain their expected/actual values when
+Eclipse supplies them.
+
+### Persistence
+
+The latest result is saved separately for each Flow in:
+
+```text
+flow-test-results-v1.bin
+```
+
+It survives closing/reopening the Flow Explorer and Eclipse restarts. Only the
+latest run per Flow is retained.
+
+Use `Clear Results` in the Flow Explorer to remove the current Flow's saved
+summary/stack traces.
+
+Renaming or deleting a Flow also renames/deletes its saved test result.
+
+### Safe bulk-run policy
+
+The bulk runner still excludes:
+
+- Arquillian tests
+- generic integration tests
+- JPA / persistence tests
+
+The number of excluded test classes is shown in the last-run summary.
+
+---
+
+## 1.12.9 Semantic Entities + Architecture Focus
+
+### Legacy entities are auto-detected
+
+The Flow Explorer now inspects Java type annotations in addition to filenames.
+
+```java
+@Entity
+public class Antrag {
+}
+```
+
+is placed in:
+
+```text
+Persistence
+  [ENTITY] Antrag.java
+```
+
+even though the filename does not contain `Entity`.
+
+Recognized semantic roles include:
+
+```text
+@Entity / @Embeddable / @MappedSuperclass -> Persistence
+@Named / @ManagedBean                     -> Bean
+@Service                                   -> Service
+@Repository                                -> Persistence
+```
+
+The semantic result is cached by Eclipse file modification stamp.
+
+### Focus one controller/architecture slice
+
+Single-click a Java architecture entry such as:
+
+```text
+DetailsichtController.java
+```
+
+and the Flow Explorer computes its dependency slice in the background.
+
+The selected root receives:
+
+```text
+[FOCUS]
+```
+
+related entries receive:
+
+```text
+•
+```
+
+and unrelated architecture entries are dimmed rather than hidden.
+
+Category headers show how many entries belong to the slice:
+
+```text
+Controller (3)  [1 related]
+Bean (4)        [2 related]
+TO (3)          [1 related]
+Persistence (5) [2 related]
+```
+
+Entity relationships work even when the old code passes an Entity directly
+through upper layers rather than converting it to a TO. JDT method signatures,
+field/type declarations, method calls, constructor types, return/parameter
+types and inheritance relationships are used.
+
+Relevant XHTML pages already known to the plug-in's JSF bean index are also
+included when focusing a JSF/CDI controller/bean.
+
+Use:
+
+```text
+Clear Focus
+```
+
+to return all Flow entries to normal rendering.
+
+### Performance
+
+Focus calculation is deliberately bounded and asynchronous:
+
+- cancellable background Eclipse Job
+- 180 ms click debounce
+- no workspace-wide caller search on selection
+- dependency AST/binding data cached by resource modification stamp
+- LRU cache capped at 768 Java files
+- lazy traversal only through files already present in the active Flow
+- maximum 7 dependency edges
+- maximum 150 related files
+- stale focus requests cannot overwrite a newer selection
+
+So the first focus on a code path may parse its reachable classes; switching
+between already-seen controllers should mostly be cache/BFS work.

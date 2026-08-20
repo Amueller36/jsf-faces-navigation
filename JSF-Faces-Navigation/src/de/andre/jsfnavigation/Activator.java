@@ -19,6 +19,8 @@ public final class Activator extends AbstractUIPlugin {
     private FlowExplorerService flowExplorerService;
     private FlowExplorerWorkbenchListener flowWorkbenchListener;
     private FlowTestImpactService flowTestImpactService;
+    private FlowTestResultStore flowTestResultStore;
+    private FlowDependencyIndexService flowDependencyIndexService;
     private SmartDeployMappingStore smartDeployMappingStore;
     private SmartDeployService smartDeployService;
     private WtpShortcutBridge wtpShortcutBridge;
@@ -57,6 +59,10 @@ public final class Activator extends AbstractUIPlugin {
                 .append("smart-deploy-mappings-v1.bin")
                 .toFile();
 
+        File flowTestResultsFile = getStateLocation()
+                .append("flow-test-results-v1.bin")
+                .toFile();
+
         beanIndexService = new BeanIndexService(beanIndexFile);
         beanIndexService.start();
 
@@ -88,6 +94,15 @@ public final class Activator extends AbstractUIPlugin {
         flowExplorerService = new FlowExplorerService(flowStateFile);
         flowExplorerService.start();
 
+        flowTestResultStore =
+                new FlowTestResultStore(
+                        flowTestResultsFile);
+        flowTestResultStore.start();
+
+        flowDependencyIndexService =
+                new FlowDependencyIndexService();
+        flowDependencyIndexService.start();
+
         flowTestImpactService =
                 new FlowTestImpactService();
         flowTestImpactService.start();
@@ -109,6 +124,16 @@ public final class Activator extends AbstractUIPlugin {
             if (flowTestImpactService != null) {
                 flowTestImpactService.stop();
                 flowTestImpactService = null;
+            }
+
+            if (flowTestResultStore != null) {
+                flowTestResultStore.stop();
+                flowTestResultStore = null;
+            }
+
+            if (flowDependencyIndexService != null) {
+                flowDependencyIndexService.stop();
+                flowDependencyIndexService = null;
             }
 
             if (flowExplorerService != null) {
@@ -158,6 +183,7 @@ public final class Activator extends AbstractUIPlugin {
 
             JavaPropertyResolver.clearCache();
             JavaReturnTypeResolver.clearCache();
+            FlowJavaSemantics.clear();
         } finally {
             instance = null;
             super.stop(context);
@@ -191,6 +217,17 @@ public final class Activator extends AbstractUIPlugin {
     public static FlowExplorerService getFlowExplorerService() {
         Activator plugin = instance;
         return plugin == null ? null : plugin.flowExplorerService;
+    }
+
+
+    public static FlowDependencyIndexService getFlowDependencyIndexService() {
+        Activator plugin = instance;
+        return plugin == null ? null : plugin.flowDependencyIndexService;
+    }
+
+    public static FlowTestResultStore getFlowTestResultStore() {
+        Activator plugin = instance;
+        return plugin == null ? null : plugin.flowTestResultStore;
     }
 
     public static SmartDeployMappingStore getSmartDeployMappingStore() {

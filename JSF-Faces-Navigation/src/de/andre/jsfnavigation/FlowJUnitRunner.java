@@ -1,5 +1,7 @@
 package de.andre.jsfnavigation;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,10 +19,10 @@ import org.eclipse.debug.core.ILaunchConfigurationType;
 import org.eclipse.debug.core.ILaunchConfigurationWorkingCopy;
 import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.jdt.core.ICompilationUnit;
-import org.eclipse.jdt.core.IJavaElement;
 import org.eclipse.jdt.core.IType;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
+import org.eclipse.jdt.junit.JUnitCore;
 import org.eclipse.jdt.launching.IJavaLaunchConfigurationConstants;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.PlatformUI;
@@ -35,6 +37,9 @@ public final class FlowJUnitRunner {
 
     private static final String ATTR_TEST_KIND =
             "org.eclipse.jdt.junit.TEST_KIND";
+
+    private static final long RESULT_WAIT_MILLIS =
+            5000L;
 
     private FlowJUnitRunner() {
     }
@@ -57,14 +62,36 @@ public final class FlowJUnitRunner {
                             return Status.OK_STATUS;
                         }
 
+                        String flowName =
+                                service.getCurrentFlowName();
+
+                        long startedAt =
+                                System.currentTimeMillis();
+
                         Discovery discovery =
                                 discover(service);
 
                         if (discovery.unitTests.isEmpty()) {
+                            FlowTestRunSummary summary =
+                                    new FlowTestRunSummary(
+                                            flowName,
+                                            startedAt,
+                                            System.currentTimeMillis(),
+                                            0,
+                                            discovery.arquillianSkipped,
+                                            discovery.jpaSkipped,
+                                            discovery.integrationSkipped,
+                                            false,
+                                            new ArrayList<FlowTestCaseResult>());
+
+                            store(summary);
+
                             show(
                                     "No safe JUnit unit tests found in the current flow."
                                     + skippedSuffix(
                                             discovery));
+
+                            FlowExplorerView.refreshIfOpen();
                             return Status.OK_STATUS;
                         }
 
@@ -84,6 +111,9 @@ public final class FlowJUnitRunner {
 
                         int completed = 0;
 
+                        List<FlowTestCaseResult> allResults =
+                                new ArrayList<FlowTestCaseResult>();
+
                         for (TestType test :
                                 discovery.unitTests.values()) {
 
@@ -92,6 +122,9 @@ public final class FlowJUnitRunner {
                             }
 
                             ILaunchConfiguration configuration =
+                                    null;
+
+                            FlowJUnitSessionCollector collector =
                                     null;
 
                             try {
@@ -135,6 +168,16 @@ public final class FlowJUnitRunner {
                                 configuration =
                                         wc.doSave();
 
+                                collector =
+                                        new FlowJUnitSessionCollector(
+                                                name,
+                                                test.file
+                                                        .getFullPath()
+                                                        .toPortableString());
+
+                                JUnitCore.addTestRunListener(
+                                        collector);
+
                                 ILaunch launch =
                                         configuration.launch(
                                                 ILaunchManager.RUN_MODE,
@@ -145,6 +188,7 @@ public final class FlowJUnitRunner {
 
                                     try {
                                         Thread.sleep(150L);
+
                                     } catch (InterruptedException e) {
                                         Thread.currentThread()
                                                 .interrupt();
@@ -152,20 +196,46 @@ public final class FlowJUnitRunner {
                                     }
                                 }
 
+                                /*
+                                 * JUnit model delivery can finish a fraction
+                                 * after the debug launch terminates. Wait a
+                                 * short bounded period so we copy the final
+                                 * test results/stack traces before moving on.
+                                 */
+                                collector.awaitFinished(
+                                        RESULT_WAIT_MILLIS);
+
+                                List<FlowTestCaseResult> classResults =
+                                        collector.snapshot();
+
+                                if (!collector.isMatched()) {
+                                    classResults.add(
+                                            unavailableResult(
+                                                    test,
+                                                    "Eclipse's JUnit result listener did not receive the test session."));
+                                }
+
+                                allResults.addAll(
+                                        classResults);
+
                                 completed++;
 
                             } catch (Exception e) {
-                                show(
-                                        "Could not run "
-                                        + test.type
-                                                .getElementName()
-                                        + ": "
-                                        + safeMessage(e));
+                                allResults.add(
+                                        launchFailure(
+                                                test,
+                                                e));
 
                             } finally {
+                                if (collector != null) {
+                                    JUnitCore.removeTestRunListener(
+                                            collector);
+                                }
+
                                 if (configuration != null) {
                                     try {
                                         configuration.delete();
+
                                     } catch (Exception ignored) {
                                         // Temporary launch config cleanup only.
                                     }
@@ -173,14 +243,24 @@ public final class FlowJUnitRunner {
                             }
                         }
 
+                        FlowTestRunSummary summary =
+                                new FlowTestRunSummary(
+                                        flowName,
+                                        startedAt,
+                                        System.currentTimeMillis(),
+                                        completed,
+                                        discovery.arquillianSkipped,
+                                        discovery.jpaSkipped,
+                                        discovery.integrationSkipped,
+                                        monitor.isCanceled(),
+                                        allResults);
+
+                        store(summary);
+                        FlowExplorerView.refreshIfOpen();
+
                         show(
-                                "Ran "
-                                + completed
-                                + (completed == 1
-                                        ? " unit-test class"
-                                        : " unit-test classes")
-                                + " from the current flow."
-                                + skippedSuffix(
+                                summaryMessage(
+                                        summary,
                                         discovery));
 
                         return Status.OK_STATUS;
@@ -189,6 +269,103 @@ public final class FlowJUnitRunner {
 
         job.setUser(true);
         job.schedule();
+    }
+
+    private static FlowTestCaseResult launchFailure(
+            TestType test,
+            Throwable error) {
+
+        return new FlowTestCaseResult(
+                test.file
+                        .getFullPath()
+                        .toPortableString(),
+                test.type
+                        .getFullyQualifiedName(),
+                "<launch>",
+                FlowTestCaseResult.ERROR,
+                stackTrace(error),
+                "",
+                "",
+                0.0d);
+    }
+
+    private static FlowTestCaseResult unavailableResult(
+            TestType test,
+            String message) {
+
+        return new FlowTestCaseResult(
+                test.file
+                        .getFullPath()
+                        .toPortableString(),
+                test.type
+                        .getFullyQualifiedName(),
+                "<result unavailable>",
+                FlowTestCaseResult.ERROR,
+                message,
+                "",
+                "",
+                0.0d);
+    }
+
+    private static String stackTrace(
+            Throwable error) {
+
+        if (error == null) {
+            return "Unknown launch error.";
+        }
+
+        StringWriter buffer =
+                new StringWriter();
+
+        PrintWriter writer =
+                new PrintWriter(buffer);
+
+        error.printStackTrace(writer);
+        writer.flush();
+
+        return buffer.toString();
+    }
+
+    private static void store(
+            FlowTestRunSummary summary) {
+
+        FlowTestResultStore store =
+                Activator.getFlowTestResultStore();
+
+        if (store != null) {
+            store.put(summary);
+        }
+    }
+
+    private static String summaryMessage(
+            FlowTestRunSummary summary,
+            Discovery discovery) {
+
+        String state;
+
+        if (summary.isCanceled()) {
+            state = "CANCELED";
+        } else if (summary.hasFailures()) {
+            state = "FAILED";
+        } else {
+            state = "PASSED";
+        }
+
+        return "Flow tests "
+                + state
+                + ": "
+                + summary.getPassedCount()
+                + " passed, "
+                + summary.getFailedCount()
+                + " failed, "
+                + summary.getSkippedCount()
+                + " skipped across "
+                + summary.getClassesRun()
+                + (summary.getClassesRun() == 1
+                        ? " class."
+                        : " classes.")
+                + skippedSuffix(
+                        discovery);
     }
 
     private static Discovery discover(
@@ -354,23 +531,6 @@ public final class FlowJUnitRunner {
                                 message);
                     }
                 });
-    }
-
-    private static String safeMessage(
-            Throwable error) {
-
-        if (error == null) {
-            return "unknown error";
-        }
-
-        String message =
-                error.getMessage();
-
-        return message == null
-                || message.trim().isEmpty()
-                        ? error.getClass()
-                                .getSimpleName()
-                        : message;
     }
 
     private static final class TestType {

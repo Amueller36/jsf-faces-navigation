@@ -110,6 +110,57 @@ public final class FlowExplorerService {
         return changed;
     }
 
+
+    public synchronized boolean reclassifyCurrentEntries() {
+        FlowDefinition flow =
+                getCurrentFlow();
+
+        if (flow == null) {
+            return false;
+        }
+
+        boolean changed = false;
+
+        List<FlowEntry> snapshot =
+                new ArrayList<FlowEntry>(
+                        flow.getEntries());
+
+        for (FlowEntry entry :
+                snapshot) {
+
+            IFile file =
+                    resolve(entry);
+
+            if (file == null) {
+                continue;
+            }
+
+            String category =
+                    FlowCategoryClassifier
+                            .classify(file);
+
+            if (!category.equals(
+                    entry.getCategory())) {
+
+                flow.addOrReplace(
+                        new FlowEntry(
+                                entry.getResourcePath(),
+                                category,
+                                entry.getAddedAt(),
+                                entry.getImpactDepth(),
+                                entry.getImpactOrigins()));
+
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            persist();
+        }
+
+        return changed;
+    }
+
     public synchronized void stop() {
         persist();
     }
@@ -125,6 +176,18 @@ public final class FlowExplorerService {
     public synchronized String getCurrentFlowName() {
         return currentFlowName;
     }
+
+    public synchronized List<FlowEntry> getCurrentEntriesSnapshot() {
+        FlowDefinition flow =
+                getCurrentFlow();
+
+        return flow == null
+                ? Collections
+                        .<FlowEntry>emptyList()
+                : new ArrayList<FlowEntry>(
+                        flow.getEntries());
+    }
+
 
     public synchronized void setCurrentFlow(
             String name) {
@@ -190,6 +253,9 @@ public final class FlowExplorerService {
             return false;
         }
 
+        String oldName =
+                current.getName();
+
         FlowDefinition replacement =
                 new FlowDefinition(name);
 
@@ -221,6 +287,15 @@ public final class FlowExplorerService {
         currentFlowName = name;
         persist();
 
+        FlowTestResultStore results =
+                Activator.getFlowTestResultStore();
+
+        if (results != null) {
+            results.rename(
+                    oldName,
+                    name);
+        }
+
         return true;
     }
 
@@ -229,11 +304,23 @@ public final class FlowExplorerService {
             return false;
         }
 
+        String deletedName =
+                currentFlowName;
+
         flows.remove(currentFlowName);
         currentFlowName =
                 flows.keySet().iterator().next();
 
         persist();
+
+        FlowTestResultStore results =
+                Activator.getFlowTestResultStore();
+
+        if (results != null) {
+            results.delete(
+                    deletedName);
+        }
+
         return true;
     }
 

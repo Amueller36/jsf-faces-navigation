@@ -1,4 +1,115 @@
-# JSF EL Navigation 1.12.7
+# JSF EL Navigation 1.12.9
+
+Version 1.12.9 adds semantic Entity detection and a performant architecture
+focus slice to the JSF Flow Explorer.
+
+### Semantic legacy-Entity detection
+
+Flow categorization is no longer only filename based. JDT source annotations
+are cached by file modification stamp and recognize:
+
+- `@Entity`, `@Embeddable`, `@MappedSuperclass` -> `Persistence`
+- `@Named`, `@ManagedBean` -> `Bean` when a stronger filename category does
+  not already apply
+- `@Service` -> `Service`
+- `@Repository` -> `Persistence`
+
+This means an old entity named simply `Antrag.java` is correctly categorized
+as Persistence even when it is passed directly into Bean/Controller layers
+instead of going through a TO. Persistence entries that are actual JPA entity
+types also display an `[ENTITY]` badge.
+
+### Architecture Focus
+
+Single-clicking a Java architecture file in the Flow Explorer now makes it the
+focus root. For a controller this produces a visual slice such as:
+
+```text
+Controller (3)  [1 related]
+  [FOCUS] DetailsichtController.java
+  OtherController.java                         <- dimmed
+
+Bean (4)  [2 related]
+  • AntragBean.java
+  • ValidationBean.java
+  UserBean.java                                <- dimmed
+
+TO (3)  [1 related]
+  • AntragTO.java
+  UserTO.java                                  <- dimmed
+
+Persistence (5)  [2 related]
+  • [ENTITY] Antrag.java
+  • AntragRepository.java
+  User.java                                    <- dimmed
+```
+
+Unrelated entries remain visible for context but are theme-aware dimmed.
+Eclipse errors keep their existing red priority. Relevant XHTML pages found
+through the existing JSF bean-usage index are included in the same focus slice.
+
+`Clear Focus` removes the slice and returns the complete Flow to normal
+rendering.
+
+### Performance design
+
+Architecture focus does **not** execute a workspace-wide call hierarchy search
+on every click. It runs in a cancellable background Eclipse Job with a small
+click debounce, lazily walks only dependencies reachable from the selected
+Flow file, and only considers files already present in the active Flow.
+
+Java dependency results are held in an in-memory LRU cache keyed by Eclipse
+resource modification stamp. Unchanged classes therefore do not get reparsed
+when switching between controllers. The traversal is bounded to 7 dependency
+edges and at most 150 related Flow files.
+
+Dependencies are derived from JDT bindings for declared types, method
+calls/return/parameter types, constructors and inheritance. This catches old
+architectural paths where an Entity itself crosses into higher layers.
+
+Version 1.12.8 adds an aggregate, persistent Flow JUnit result overview.
+
+`Run Unit Tests` still runs all safe unit-test classes sequentially, so one
+failed class does not prevent the remaining classes from running. The plug-in
+now listens to Eclipse's JUnit model and copies the case-level result of each
+launch into one combined Flow summary.
+
+The `Tests` tree starts with the latest result for the active flow:
+
+```text
+Tests
+  Last run: FAILED — 20 Aug 12:34  (38 passed, 2 failed, 1 skipped, 6 classes)
+    Failed tests (2)
+      AumiAntragBeanTest (1 case)
+        ✗ shouldCreateAntrag() — java.lang.AssertionError: ...
+          Stack trace… (click to open)
+      UserServiceTest (1 case)
+        ! shouldRejectInvalidUser() — java.lang.NullPointerException
+          Stack trace… (click to open)
+    Skipped tests (1)
+      SomeTest (1 case)
+        ○ ignoredForNow()
+  Impacted by ...
+```
+
+The overview intentionally keeps successful cases collapsed into the aggregate
+count, while failed/error and skipped cases remain inspectable. Clicking a test
+class opens its file; clicking a test case jumps to the test method when it can
+be resolved.
+
+Selecting `Stack trace…` opens a resizable, copyable full-trace dialog.
+Double-clicking a Java stack frame such as `FooTest.java:42` resolves the Java
+type in the workspace and jumps to that source line.
+
+The latest result is stored separately per Flow in
+`flow-test-results-v1.bin`, including failure traces and expected/actual values,
+and survives closing the Flow Explorer or restarting Eclipse. `Clear Results`
+removes the saved result for the current Flow. Flow rename/delete operations
+also rename/delete their saved result.
+
+Arquillian, generic integration, and JPA/persistence tests remain excluded from
+the bulk runner and their excluded-class count is visible in the last-run
+summary.
 
 Version 1.12.7 groups automatically discovered impacted tests by the exact
 production code that caused them to be discovered.
