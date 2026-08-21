@@ -78,6 +78,7 @@ public final class FlowExplorerView
                     FlowCategoryClassifier.BEAN,
                     FlowCategoryClassifier.TO,
                     FlowCategoryClassifier.ISP,
+                    FlowCategoryClassifier.DSP,
                     FlowCategoryClassifier.SERVICE,
                     FlowCategoryClassifier.PERSISTENCE,
                     FlowCategoryClassifier.JAXB,
@@ -476,7 +477,7 @@ private void createTestActionsRow(
             "Auto tests");
 
     autoTestsButton.setToolTipText(
-            "Automatically add JUnit tests from the caller hierarchy when a Java method you edit is touched.");
+            "Automatically add matching existing test classes when production files are opened, and impacted JUnit tests from caller hierarchy when edited methods are saved.");
 
     autoTestsButton.setLayoutData(
             new GridData(
@@ -527,7 +528,7 @@ private void createTestInsightActionsRow(
     Composite row =
             actionRow(
                     parent,
-                    2);
+                    3);
 
     Button txLens =
             actionButton(
@@ -542,6 +543,26 @@ private void createTestInsightActionsRow(
                         SelectionEvent e) {
 
                     openTransactionLens();
+                }
+            });
+
+
+    Button featureTests =
+            actionButton(
+                    row,
+                    "Feature Tests…",
+                    "Audit matching Controller/Bean/ISP/DSP classes, existing test classes and production methods not referenced by tests.");
+
+    featureTests.addSelectionListener(
+            new SelectionAdapter() {
+                @Override
+                public void widgetSelected(
+                        SelectionEvent e) {
+
+                    FeatureTestAuditLauncher
+                            .open(
+                                    getSite()
+                                            .getShell());
                 }
             });
 

@@ -30,6 +30,39 @@ public final class TestTargetFinder {
     private TestTargetFinder() {
     }
 
+
+    public static List<TestTargetCandidate> find(
+            IType productionType,
+            IProgressMonitor monitor) {
+
+        if (productionType == null
+                || !productionType.exists()) {
+
+            return Collections.emptyList();
+        }
+
+        TestHelperAnalysis lightweight =
+                new TestHelperAnalysis(
+                        productionType
+                                .getFullyQualifiedName(),
+                        "",
+                        "void",
+                        Collections
+                                .<TestHelperParameter>
+                                        emptyList(),
+                        Collections
+                                .<TestHelperDependency>
+                                        emptyList(),
+                        false,
+                        false,
+                        false,
+                        false);
+
+        return find(
+                lightweight,
+                monitor);
+    }
+
     public static List<TestTargetCandidate> find(
             TestHelperAnalysis analysis,
             IProgressMonitor monitor) {

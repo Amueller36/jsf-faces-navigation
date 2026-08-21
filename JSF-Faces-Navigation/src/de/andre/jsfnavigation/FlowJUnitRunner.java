@@ -57,6 +57,7 @@ public final class FlowJUnitRunner {
                         null,
                         null,
                         null,
+                        ILaunchManager.RUN_MODE,
                         "Run current-flow unit tests"));
     }
 
@@ -75,6 +76,7 @@ public final class FlowJUnitRunner {
                         file,
                         null,
                         null,
+                        ILaunchManager.RUN_MODE,
                         "Run "
                                 + file.getName()));
     }
@@ -95,6 +97,7 @@ public final class FlowJUnitRunner {
                         file,
                         fullyQualifiedClassName,
                         null,
+                        ILaunchManager.RUN_MODE,
                         "Run "
                                 + simpleClassName(
                                         fullyQualifiedClassName,
@@ -105,6 +108,17 @@ public final class FlowJUnitRunner {
     public static void runExplicitTestMethod(
             IFile file,
             IMethod method) {
+
+        runExplicitTestMethod(
+                file,
+                method,
+                ILaunchManager.RUN_MODE);
+    }
+
+    public static void runExplicitTestMethod(
+            IFile file,
+            IMethod method,
+            String launchMode) {
 
         if (file == null
                 || !file.exists()
@@ -126,16 +140,74 @@ public final class FlowJUnitRunner {
             return;
         }
 
+        String mode =
+                normalizeLaunchMode(
+                        launchMode);
+
         schedule(
                 new RunRequest(
                         SCOPE_METHOD,
                         file,
                         type.getFullyQualifiedName(),
                         method.getElementName(),
-                        "Run "
+                        mode,
+                        modeLabel(mode)
+                                + " "
                                 + type.getElementName()
                                 + "."
                                 + method.getElementName()));
+    }
+
+    public static void runExplicitTestClass(
+            IFile file,
+            IType type,
+            String launchMode) {
+
+        if (file == null
+                || !file.exists()
+                || type == null
+                || !type.exists()
+                || FlowTestClassifier
+                        .classify(
+                                type)
+                        == FlowTestClassifier.NOT_TEST) {
+
+            return;
+        }
+
+        String mode =
+                normalizeLaunchMode(
+                        launchMode);
+
+        schedule(
+                new RunRequest(
+                        SCOPE_CLASS,
+                        file,
+                        type.getFullyQualifiedName(),
+                        null,
+                        mode,
+                        modeLabel(mode)
+                                + " "
+                                + type.getElementName(),
+                        true));
+    }
+
+    private static String normalizeLaunchMode(
+            String launchMode) {
+
+        return ILaunchManager.DEBUG_MODE.equals(
+                launchMode)
+                        ? ILaunchManager.DEBUG_MODE
+                        : ILaunchManager.RUN_MODE;
+    }
+
+    private static String modeLabel(
+            String launchMode) {
+
+        return ILaunchManager.DEBUG_MODE.equals(
+                launchMode)
+                        ? "Debug"
+                        : "Run";
     }
 
     private static void schedule(
@@ -280,7 +352,7 @@ public final class FlowJUnitRunner {
 
                 ILaunch launch =
                         configuration.launch(
-                                ILaunchManager.RUN_MODE,
+                                request.launchMode,
                                 monitor);
 
                 while (!launch.isTerminated()
@@ -352,7 +424,8 @@ public final class FlowJUnitRunner {
 
         boolean belongsToCurrentFlow =
                 request.scope
-                        != SCOPE_METHOD
+                        == SCOPE_FLOW
+                || request.file == null
                 || service.containsFile(
                         request.file);
 
@@ -691,14 +764,36 @@ public final class FlowJUnitRunner {
         final IFile file;
         final String fullyQualifiedClassName;
         final String methodName;
+        final String launchMode;
         final String jobName;
+        final boolean explicitClassLaunch;
 
         RunRequest(
                 int scope,
                 IFile file,
                 String fullyQualifiedClassName,
                 String methodName,
+                String launchMode,
                 String jobName) {
+
+            this(
+                    scope,
+                    file,
+                    fullyQualifiedClassName,
+                    methodName,
+                    launchMode,
+                    jobName,
+                    false);
+        }
+
+        RunRequest(
+                int scope,
+                IFile file,
+                String fullyQualifiedClassName,
+                String methodName,
+                String launchMode,
+                String jobName,
+                boolean explicitClassLaunch) {
 
             this.scope = scope;
             this.file = file;
@@ -706,7 +801,12 @@ public final class FlowJUnitRunner {
                     fullyQualifiedClassName;
             this.methodName =
                     methodName;
+            this.launchMode =
+                    normalizeLaunchMode(
+                            launchMode);
             this.jobName = jobName;
+            this.explicitClassLaunch =
+                    explicitClassLaunch;
         }
 
         Discovery discover(
@@ -717,7 +817,10 @@ public final class FlowJUnitRunner {
                         .discover(service);
             }
 
-            if (scope == SCOPE_METHOD) {
+            if (scope == SCOPE_METHOD
+                    || (scope == SCOPE_CLASS
+                            && explicitClassLaunch)) {
+
                 Discovery result =
                         new Discovery();
 
@@ -744,14 +847,21 @@ public final class FlowJUnitRunner {
                             continue;
                         }
 
+                        String testName =
+                                scope == SCOPE_METHOD
+                                        ? methodName
+                                        : "";
+
                         result.unitTests.put(
                                 type.getHandleIdentifier()
-                                        + "#"
-                                        + methodName,
+                                        + (testName.isEmpty()
+                                                ? ""
+                                                : "#"
+                                                        + testName),
                                 new TestType(
                                         type,
                                         file,
-                                        methodName));
+                                        testName));
 
                         break;
                     }

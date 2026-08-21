@@ -5,13 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
+import org.eclipse.debug.core.ILaunchManager;
 import org.eclipse.jface.text.DocumentEvent;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.IDocumentListener;
 import org.eclipse.jface.text.source.AbstractRulerColumn;
 import org.eclipse.jface.text.source.CompositeRuler;
 import org.eclipse.jface.text.source.IAnnotationModel;
-import org.eclipse.jface.text.source.IVerticalRulerColumn;
 import org.eclipse.jdt.core.ICompilationUnit;
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.ISourceRange;
@@ -23,8 +23,13 @@ import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseMoveListener;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Listener;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.ui.IFileEditorInput;
 import org.eclipse.ui.texteditor.ITextEditor;
 import org.eclipse.ui.texteditor.rulers.AbstractContributedRulerColumn;
@@ -41,6 +46,9 @@ public final class JavaTestRunRulerColumn
     private Map<Integer, IMethod> methodsByLine =
             Collections.emptyMap();
 
+    private Map<Integer, IType> typesByLine =
+            Collections.emptyMap();
+
     private IFile file;
     private IDocument document;
     private IDocumentListener documentListener;
@@ -55,13 +63,13 @@ public final class JavaTestRunRulerColumn
 
         attachEditor();
 
-        Control control =
+        final Control control =
                 delegate.createControl(
                         parentRuler,
                         parentControl);
 
         control.setToolTipText(
-                "Run JUnit test");
+                "JUnit run/debug gutter");
 
         control.addMouseListener(
                 new MouseAdapter() {
@@ -73,26 +81,19 @@ public final class JavaTestRunRulerColumn
                             return;
                         }
 
-                        int line =
-                                delegate
-                                        .toDocumentLineNumber(
-                                                e.y);
+                        LaunchTarget target =
+                                targetAtY(
+                                        e.y);
 
-                        IMethod method =
-                                methodAtLine(
-                                        line);
-
-                        if (method == null
-                                || file == null
-                                || !file.exists()) {
-
+                        if (target == null) {
                             return;
                         }
 
-                        FlowJUnitRunner
-                                .runExplicitTestMethod(
-                                        file,
-                                        method);
+                        showRunDebugMenu(
+                                control,
+                                e.x,
+                                e.y,
+                                target);
                     }
                 });
 
@@ -102,19 +103,15 @@ public final class JavaTestRunRulerColumn
                     public void mouseMove(
                             MouseEvent e) {
 
-                        int line =
-                                delegate
-                                        .toDocumentLineNumber(
-                                                e.y);
+                        LaunchTarget target =
+                                targetAtY(
+                                        e.y);
 
                         boolean runnable =
-                                methodAtLine(
-                                        line)
-                                        != null;
+                                target != null;
 
                         Control current =
-                                delegate
-                                        .getControl();
+                                delegate.getControl();
 
                         if (current == null
                                 || current.isDisposed()) {
@@ -124,16 +121,17 @@ public final class JavaTestRunRulerColumn
 
                         current.setCursor(
                                 runnable
-                                        ? current
-                                                .getDisplay()
+                                        ? current.getDisplay()
                                                 .getSystemCursor(
                                                         SWT.CURSOR_HAND)
                                         : null);
 
                         current.setToolTipText(
-                                runnable
-                                        ? "Run this JUnit test method"
-                                        : "JUnit test run gutter");
+                                target == null
+                                        ? "JUnit run/debug gutter"
+                                        : target.isMethod()
+                                                ? "Run or debug this JUnit test method"
+                                                : "Run or debug this JUnit test class");
                     }
                 });
 
@@ -176,12 +174,166 @@ public final class JavaTestRunRulerColumn
         detachDocument();
 
         redrawGeneration++;
+
         methodsByLine =
+                Collections.emptyMap();
+
+        typesByLine =
                 Collections.emptyMap();
 
         delegate.dispose();
 
         super.columnRemoved();
+    }
+
+    private void showRunDebugMenu(
+            final Control control,
+            int x,
+            int y,
+            final LaunchTarget target) {
+
+        final Menu menu =
+                new Menu(
+                        control);
+
+        MenuItem run =
+                new MenuItem(
+                        menu,
+                        SWT.PUSH);
+
+        run.setText(
+                "Run "
+                + target.getDisplayName());
+
+        run.addListener(
+                SWT.Selection,
+                new Listener() {
+                    @Override
+                    public void handleEvent(
+                            Event event) {
+
+                        launch(
+                                target,
+                                ILaunchManager.RUN_MODE);
+                    }
+                });
+
+        MenuItem debug =
+                new MenuItem(
+                        menu,
+                        SWT.PUSH);
+
+        debug.setText(
+                "Debug "
+                + target.getDisplayName());
+
+        debug.addListener(
+                SWT.Selection,
+                new Listener() {
+                    @Override
+                    public void handleEvent(
+                            Event event) {
+
+                        launch(
+                                target,
+                                ILaunchManager.DEBUG_MODE);
+                    }
+                });
+
+        menu.addListener(
+                SWT.Hide,
+                new Listener() {
+                    @Override
+                    public void handleEvent(
+                            Event event) {
+
+                        control.getDisplay()
+                                .asyncExec(
+                                        new Runnable() {
+                                            @Override
+                                            public void run() {
+
+                                                if (!menu.isDisposed()) {
+                                                    menu.dispose();
+                                                }
+                                            }
+                                        });
+                    }
+                });
+
+        Point location =
+                control.toDisplay(
+                        x,
+                        y);
+
+        menu.setLocation(
+                location);
+
+        menu.setVisible(
+                true);
+    }
+
+    private void launch(
+            LaunchTarget target,
+            String launchMode) {
+
+        if (target == null
+                || file == null
+                || !file.exists()) {
+
+            return;
+        }
+
+        if (target.isMethod()) {
+            FlowJUnitRunner
+                    .runExplicitTestMethod(
+                            file,
+                            target.method,
+                            launchMode);
+
+        } else {
+            FlowJUnitRunner
+                    .runExplicitTestClass(
+                            file,
+                            target.type,
+                            launchMode);
+        }
+    }
+
+    private LaunchTarget targetAtY(
+            int y) {
+
+        int line =
+                delegate
+                        .toDocumentLineNumber(
+                                y);
+
+        if (line < 0) {
+            return null;
+        }
+
+        refreshTargetsIfNeeded();
+
+        IMethod method =
+                methodsByLine.get(
+                        Integer.valueOf(
+                                line));
+
+        if (method != null) {
+            return LaunchTarget
+                    .forMethod(
+                            method);
+        }
+
+        IType type =
+                typesByLine.get(
+                        Integer.valueOf(
+                                line));
+
+        return type == null
+                ? null
+                : LaunchTarget.forType(
+                        type);
     }
 
     private void attachEditor() {
@@ -226,8 +378,7 @@ public final class JavaTestRunRulerColumn
                                 ++redrawGeneration;
 
                         final Control control =
-                                delegate
-                                        .getControl();
+                                delegate.getControl();
 
                         if (control == null
                                 || control.isDisposed()) {
@@ -249,15 +400,12 @@ public final class JavaTestRunRulerColumn
                                                 }
 
                                                 Control current =
-                                                        delegate
-                                                                .getControl();
+                                                        delegate.getControl();
 
                                                 if (current != null
-                                                        && !current
-                                                                .isDisposed()) {
+                                                        && !current.isDisposed()) {
 
-                                                    delegate
-                                                            .redraw();
+                                                    delegate.redraw();
                                                 }
                                             }
                                         });
@@ -283,21 +431,7 @@ public final class JavaTestRunRulerColumn
         file = null;
     }
 
-    private IMethod methodAtLine(
-            int zeroBasedLine) {
-
-        if (zeroBasedLine < 0) {
-            return null;
-        }
-
-        refreshMethodsIfNeeded();
-
-        return methodsByLine.get(
-                Integer.valueOf(
-                        zeroBasedLine));
-    }
-
-    private void refreshMethodsIfNeeded() {
+    private void refreshTargetsIfNeeded() {
         if (!dirty) {
             return;
         }
@@ -312,6 +446,10 @@ public final class JavaTestRunRulerColumn
 
             methodsByLine =
                     Collections.emptyMap();
+
+            typesByLine =
+                    Collections.emptyMap();
+
             return;
         }
 
@@ -324,15 +462,42 @@ public final class JavaTestRunRulerColumn
 
             methodsByLine =
                     Collections.emptyMap();
+
+            typesByLine =
+                    Collections.emptyMap();
+
             return;
         }
 
-        Map<Integer, IMethod> result =
+        Map<Integer, IMethod> methods =
                 new LinkedHashMap<Integer, IMethod>();
+
+        Map<Integer, IType> types =
+                new LinkedHashMap<Integer, IType>();
 
         try {
             for (IType type :
                     unit.getAllTypes()) {
+
+                if (FlowTestClassifier
+                        .classify(
+                                type)
+                        != FlowTestClassifier.NOT_TEST) {
+
+                    ISourceRange typeNameRange =
+                            type.getNameRange();
+
+                    int line =
+                            lineOf(
+                                    typeNameRange);
+
+                    if (line >= 0) {
+                        types.put(
+                                Integer.valueOf(
+                                        line),
+                                type);
+                    }
+                }
 
                 for (IMethod method :
                         type.getMethods()) {
@@ -344,35 +509,50 @@ public final class JavaTestRunRulerColumn
                         continue;
                     }
 
-                    ISourceRange nameRange =
-                            method.getNameRange();
-
-                    if (nameRange == null
-                            || nameRange.getOffset()
-                                    < 0) {
-
-                        continue;
-                    }
-
                     int line =
-                            document.getLineOfOffset(
-                                    Math.min(
-                                            nameRange.getOffset(),
-                                            document.getLength()));
+                            lineOf(
+                                    method.getNameRange());
 
-                    result.put(
-                            Integer.valueOf(
-                                    line),
-                            method);
+                    if (line >= 0) {
+                        methods.put(
+                                Integer.valueOf(
+                                        line),
+                                method);
+                    }
                 }
             }
 
         } catch (Exception e) {
-            result.clear();
+            methods.clear();
+            types.clear();
         }
 
         methodsByLine =
-                result;
+                methods;
+
+        typesByLine =
+                types;
+    }
+
+    private int lineOf(
+            ISourceRange range) {
+
+        if (range == null
+                || range.getOffset() < 0
+                || document == null) {
+
+            return -1;
+        }
+
+        try {
+            return document.getLineOfOffset(
+                    Math.min(
+                            range.getOffset(),
+                            document.getLength()));
+
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private final class TestRunRuler
@@ -398,11 +578,17 @@ public final class JavaTestRunRulerColumn
                     linePixel,
                     lineHeight);
 
-            IMethod method =
-                    methodAtLine(
-                            modelLine);
+            refreshTargetsIfNeeded();
 
-            if (method == null) {
+            boolean runnable =
+                    methodsByLine.containsKey(
+                            Integer.valueOf(
+                                    modelLine))
+                    || typesByLine.containsKey(
+                            Integer.valueOf(
+                                    modelLine));
+
+            if (!runnable) {
                 return;
             }
 
@@ -420,6 +606,7 @@ public final class JavaTestRunRulerColumn
                                     lineHeight / 3));
 
             int left = 4;
+
             int right =
                     Math.max(
                             left + 5,
@@ -440,6 +627,54 @@ public final class JavaTestRunRulerColumn
                             right,
                             centerY
                     });
+        }
+    }
+
+    private static final class LaunchTarget {
+
+        final IMethod method;
+        final IType type;
+
+        private LaunchTarget(
+                IMethod method,
+                IType type) {
+
+            this.method = method;
+            this.type = type;
+        }
+
+        static LaunchTarget forMethod(
+                IMethod method) {
+
+            return new LaunchTarget(
+                    method,
+                    method == null
+                            ? null
+                            : method.getDeclaringType());
+        }
+
+        static LaunchTarget forType(
+                IType type) {
+
+            return new LaunchTarget(
+                    null,
+                    type);
+        }
+
+        boolean isMethod() {
+            return method != null;
+        }
+
+        String getDisplayName() {
+            if (isMethod()) {
+                return type.getElementName()
+                        + "."
+                        + method.getElementName();
+            }
+
+            return type == null
+                    ? "JUnit test"
+                    : type.getElementName();
         }
     }
 }

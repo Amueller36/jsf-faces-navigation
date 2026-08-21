@@ -66,6 +66,14 @@ public final class FlowAutoCaptureListener
             service.addFile(file);
             FlowExplorerView.refreshIfOpen();
         }
+
+        if (service != null
+                && service.isAutoTestDiscovery()) {
+
+            FlowRelatedTestDiscoveryService
+                    .discoverForOpenedFile(
+                            file);
+        }
     }
 
     @Override

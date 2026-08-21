@@ -1,4 +1,191 @@
-# JSF EL Navigation 1.14.2
+# JSF EL Navigation 1.15.0
+
+Version 1.15.0 adds an on-demand **Feature Test Audit** for exactly the
+workflow where a feature spans many Controller/Bean/ISP/DSP classes and the
+developer must find what is still missing tests.
+
+### Feature Test Audit
+
+Open the JSF Flow Explorer and click:
+
+```text
+Feature Tests…
+```
+
+Enter a class-name fragment such as:
+
+```text
+Postbuch
+```
+
+The scan uses Eclipse/JDT's workspace type index, rather than recursively
+walking the filesystem. It selects concrete production types whose class names
+contain the feature term and whose architectural role is one of:
+
+```text
+Controller
+Bean
+ISP
+DSP
+```
+
+It excludes:
+
+```text
+interfaces (including IPostbuch...)
+Entities / JPA persistence types
+TO / DTO classes
+JAXB classes
+existing tests
+```
+
+The result is a tree such as:
+
+```text
+[NO TEST CLASS] PostbuchDSP — DSP — 5/5 methods untested — 0% static method-reference coverage
+    ✗ savePostbuch(...) [NOT REFERENCED BY TEST]
+    ✗ loadPostbuch(...) [NOT REFERENCED BY TEST]
+
+[PARTIAL] PostbuchController — Controller — 2/8 methods untested — 75% static method-reference coverage
+    TEST: PostbuchControllerTest [VAT-Refund-JUnit] UNIT
+    ✗ deleteEntry(...) [NOT REFERENCED BY TEST]
+    ✗ recalculate(...) [NOT REFERENCED BY TEST]
+
+[OK] PostbuchBean — Bean — 0/6 methods untested — 100% static method-reference coverage
+    TEST: PostbuchBeanTest [VAT-Refund-JUnit] UNIT
+```
+
+Already referenced methods are hidden by default so the audit immediately
+focuses on missing work. `Show already referenced/tested methods` reveals the
+full method inventory.
+
+The dialog provides:
+
+```text
+Open Source
+Open Test
+Generate Helper
+Create Test Class…
+Add Audit to Flow
+```
+
+`Generate Helper` reuses the existing Mockito/JPA test-helper generator for the
+selected missing production method.
+
+`Create Test Class…` ranks real Java source roots in the workspace, including
+separate unit/JPA test projects, applies the existing `de.zivit.*` ->
+`de.itzbund.*` migration rule for new test packages, creates a minimal
+compilable test class and opens it.
+
+### Static coverage semantics
+
+The feature audit deliberately calls its metric **static method-reference
+coverage**. A production method is considered covered when a matching existing
+test class contains a JDT-resolved invocation of that production method (also
+recognizing calls through a production supertype/interface).
+
+This is much faster and more useful for inventory work than launching every test
+suite, but it is not equivalent to JaCoCo runtime line/branch coverage. A test
+can reference a method and still have weak assertions; conversely reflection or
+dynamic invocation can be missed.
+
+The scan is on-demand and bounded:
+
+```text
+max production classes:       250
+max testable methods/class:   160
+max parsed test source CUs:    16 per production class
+```
+
+No audit work runs while typing/editing.
+
+### Related tests automatically join the Flow
+
+With `Auto tests` enabled, opening/activating a production Java file that is in
+the current Flow now performs a small JDT-index lookup for conventionally named
+existing test classes. For example:
+
+```text
+PostbuchISP.java
+     ↓ open
+PostbuchISPTest.java
+     ↓
+automatically added to Tests in the current Flow
+```
+
+The lookup is debounced and only runs for production files that actually belong
+to the current Flow.
+
+`FlowExplorerService.addFile(...)` now also reclassifies an already-present
+entry. Therefore old persisted entries such as `PostbuchISPTest.java` that were
+previously stored under `Other` are moved to `Tests` the next time they are
+added/opened.
+
+### DSP category
+
+`DSP` is now a first-class Flow category, alongside Controller, Bean, ISP,
+Service, Persistence, etc., and is included in Feature Test Audit.
+
+Version 1.14.3 completes the Java-editor JUnit gutter behavior.
+
+### Test class + test method gutter actions
+
+The JUnit ruler now shows a green play triangle on both:
+
+```text
+▶  public class AuslandsantragISPImplTest extends JPATestClient {
+       ...
+   }
+
+   @Test
+▶  public void shouldLoadSomething() {
+       ...
+   }
+```
+
+A class-line click targets the whole JUnit class. A method-line click targets
+that exact JUnit test method.
+
+Clicking a triangle no longer launches immediately. It opens a tiny SWT context
+menu at the gutter with:
+
+```text
+Run AuslandsantragISPImplTest
+Debug AuslandsantragISPImplTest
+```
+
+or, for a method:
+
+```text
+Run AuslandsantragISPImplTest.shouldLoadSomething
+Debug AuslandsantragISPImplTest.shouldLoadSomething
+```
+
+Debug uses Eclipse's normal JUnit debug launch mode, so normal breakpoints and
+the Debug perspective/session behavior apply.
+
+Explicit gutter launches intentionally work for JPA/integration test classes as
+well; the conservative exclusions still apply only to the bulk Flow
+`Run Unit Tests` action.
+
+### JUnit lifecycle
+
+Both class and exact-method actions still use Eclipse's normal JUnit launch
+configuration. The plug-in does **not** invoke the Java test method directly.
+
+Therefore normal lifecycle behavior remains owned by JUnit:
+
+- JUnit 4 `@Before` runs before each selected test method, including inherited
+  superclass `@Before` methods according to JUnit's normal rules.
+- JUnit 4 `@BeforeClass` runs for the class launch lifecycle.
+- JUnit 5 `@BeforeEach` / `@BeforeAll` work through the JUnit 5 loader.
+- JUnit 3 `setUp()` runs through the JUnit 3 loader.
+
+Selecting a single test method only limits which test case JUnit executes; it
+does not bypass its setup/teardown lifecycle.
+
+The gutter stays lightweight: class/method source-line targets are refreshed
+only when the open document changes and use the existing 280 ms debounce.
 
 Version 1.14.2 fixes a JAXB/XSD hyperlink-detector instantiation error.
 

@@ -9,6 +9,7 @@ public final class FlowCategoryClassifier {
     public static final String BEAN = "Bean";
     public static final String TO = "TO";
     public static final String ISP = "ISP";
+    public static final String DSP = "DSP";
     public static final String SERVICE = "Service";
     public static final String PERSISTENCE = "Persistence";
     public static final String JAXB = "JAXB";
@@ -108,6 +109,12 @@ public final class FlowCategoryClassifier {
                 || name.contains("ISP")) {
 
             return ISP;
+        }
+
+        if (name.endsWith("DSP.java")
+                || name.contains("DSP")) {
+
+            return DSP;
         }
 
         if (name.endsWith("Service.java")) {

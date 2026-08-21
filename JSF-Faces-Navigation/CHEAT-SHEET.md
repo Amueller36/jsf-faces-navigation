@@ -2099,3 +2099,141 @@ without a standard content-assist operation.
 ## 1.14.2 JAXB hyperlink detector fix
 
 If 1.14.0/1.14.1 showed `failed to load the hyperlink detector` while a Java file still opened normally, the cause was a private constructor on the JAXB/XSD detector extension. 1.14.2 makes that constructor public so Eclipse can instantiate it normally.
+
+---
+
+## 1.14.3 JUnit gutter: class scope + Run/Debug
+
+The Java editor gutter now shows a play triangle beside both a recognized JUnit
+test class and each individual test method.
+
+```java
+▶ public class FooTest {
+
+    @Test
+  ▶ public void shouldWork() {
+    }
+}
+```
+
+Click either triangle and choose:
+
+```text
+Run ...
+Debug ...
+```
+
+Class triangle = whole test class.
+
+Method triangle = exact test method.
+
+These are standard Eclipse JUnit launches. JUnit setup/teardown is not bypassed:
+
+```text
+JUnit 4: @Before / @After (+ inherited superclass lifecycle)
+JUnit 5: @BeforeEach / @AfterEach
+JUnit 3: setUp() / tearDown()
+```
+
+Debug mode uses the normal Eclipse JUnit debug launch and respects breakpoints.
+
+The explicit gutter action can launch JPA/integration tests. Bulk Flow
+`Run Unit Tests` keeps its safety exclusions.
+
+---
+
+## 1.15.0 Feature Test Audit
+
+Flow Explorer:
+
+```text
+Feature Tests…
+```
+
+Enter:
+
+```text
+Postbuch
+```
+
+Default production scope:
+
+```text
+Controller
+Bean
+ISP
+DSP
+```
+
+Excluded automatically:
+
+```text
+interfaces / IPostbuch...
+Entity / Persistence
+TO / DTO
+JAXB
+Tests
+```
+
+Result classes are ranked with missing coverage first:
+
+```text
+[NO TEST CLASS]  5/5 untested
+[PARTIAL]        2/8 untested
+[OK]             0/6 untested
+```
+
+Methods not referenced by matching tests:
+
+```text
+✗ method(...) [NOT REFERENCED BY TEST]
+```
+
+Existing matching test classes are shown under the production class.
+
+Buttons:
+
+```text
+Open Source
+Open Test
+Generate Helper
+Create Test Class…
+Add Audit to Flow
+```
+
+`Create Test Class…` suggests actual Java source roots in the workspace and uses
+`de.itzbund.*` for a new test when production still lives under `de.zivit.*`.
+
+### Important: coverage meaning
+
+The percentage is **static method-reference coverage**, not JaCoCo runtime
+coverage. It maps JDT-resolved production method calls found in matching test
+source classes.
+
+Performance limits:
+
+```text
+250 feature production classes
+160 methods per production class
+16 parsed matching test compilation units per class
+on-demand background Job only
+```
+
+### Auto tests on file open
+
+With Flow `Auto tests` enabled:
+
+```text
+open PostbuchISP.java
+        ↓
+matching PostbuchISPTest.java found via JDT type index
+        ↓
+added to Tests in current Flow
+```
+
+Already-persisted test files are reclassified when needed, fixing test files
+that remained under `Other`.
+
+### DSP
+
+`DSP` is now a dedicated Flow architecture category.

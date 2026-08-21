@@ -345,6 +345,37 @@ public final class FlowExplorerService {
                         .toPortableString();
 
         if (flow.contains(resourcePath)) {
+            String category =
+                    FlowCategoryClassifier
+                            .classify(
+                                    file);
+
+            for (FlowEntry existing :
+                    flow.getEntries()) {
+
+                if (!resourcePath.equals(
+                        existing.getResourcePath())) {
+
+                    continue;
+                }
+
+                if (!category.equals(
+                        existing.getCategory())) {
+
+                    flow.addOrReplace(
+                            new FlowEntry(
+                                    existing.getResourcePath(),
+                                    category,
+                                    existing.getAddedAt(),
+                                    existing.getImpactDepth(),
+                                    existing.getImpactOrigins()));
+
+                    persist();
+                }
+
+                return;
+            }
+
             return;
         }
 
