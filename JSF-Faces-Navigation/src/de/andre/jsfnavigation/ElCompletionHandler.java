@@ -1,6 +1,7 @@
 package de.andre.jsfnavigation;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -17,6 +18,8 @@ import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.jface.text.ITextOperationTarget;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.text.source.ISourceViewer;
+import org.eclipse.jface.text.contentassist.CompletionProposal;
+import org.eclipse.jface.text.contentassist.ICompletionProposal;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.window.Window;
 import org.eclipse.jdt.core.IField;
@@ -72,6 +75,27 @@ public final class ElCompletionHandler
                         document,
                         offset);
 
+        JsfMarkupCompletionContext markupContext =
+                JsfMarkupCompletionContext
+                        .detect(
+                                document,
+                                offset);
+
+        if (context != null
+                || markupContext != null) {
+
+            if (invokeNativeContentAssist(
+                    editor)) {
+
+                return null;
+            }
+        }
+
+        /*
+         * Compatibility fallback for unusual/older WTP editor
+         * configurations that do not expose the standard content-assist
+         * operation.
+         */
         if (context != null) {
             completeEl(
                     editor,
@@ -88,6 +112,155 @@ public final class ElCompletionHandler
                 offset);
 
         return null;
+    }
+
+
+    static boolean invokeNativeContentAssist(
+            ITextEditor editor) {
+
+        if (editor == null) {
+            return false;
+        }
+
+        ITextOperationTarget operation =
+                (ITextOperationTarget)
+                        editor.getAdapter(
+                                ITextOperationTarget.class);
+
+        if (operation == null
+                || !operation.canDoOperation(
+                        ISourceViewer.CONTENTASSIST_PROPOSALS)) {
+
+            return false;
+        }
+
+        operation.doOperation(
+                ISourceViewer.CONTENTASSIST_PROPOSALS);
+
+        return true;
+    }
+
+    static List<ICompletionProposal> nativeElProposals(
+            IDocument document,
+            int offset,
+            IFile file) {
+
+        CompletionContext context =
+                context(
+                        document,
+                        offset);
+
+        if (context == null) {
+            return Collections.emptyList();
+        }
+
+        String project =
+                file == null
+                        ? null
+                        : file.getProject()
+                                .getName();
+
+        IType type =
+                ElJavaResolver.resolveBean(
+                        context.beanName,
+                        project);
+
+        if (type == null
+                && file != null) {
+
+            String alias =
+                    JsfPageInspector
+                            .resolveUiParamAlias(
+                                    file,
+                                    context.beanName);
+
+            if (alias != null) {
+                type =
+                        ElJavaResolver.resolveBean(
+                                alias,
+                                project);
+            }
+        }
+
+        if (type == null
+                && file != null) {
+
+            type =
+                    JsfLocalVariableTypeResolver
+                            .resolve(
+                                    file,
+                                    context.beanName,
+                                    project);
+        }
+
+        if (type == null) {
+            return Collections.emptyList();
+        }
+
+        try {
+            for (String property :
+                    context.resolvedProperties) {
+
+                JavaMemberTarget target =
+                        JavaPropertyResolver
+                                .resolve(
+                                        type,
+                                        property);
+
+                if (target == null) {
+                    return Collections.emptyList();
+                }
+
+                type =
+                        JavaReturnTypeResolver
+                                .resolve(
+                                        type,
+                                        target);
+
+                if (type == null) {
+                    return Collections.emptyList();
+                }
+            }
+
+            List<String> values =
+                    proposals(
+                            type);
+
+            List<ICompletionProposal> result =
+                    new ArrayList<ICompletionProposal>();
+
+            for (String proposal :
+                    values) {
+
+                if (!context.prefix
+                        .isEmpty()
+                        && !proposal
+                                .toLowerCase()
+                                .startsWith(
+                                        context.prefix
+                                                .toLowerCase())) {
+
+                    continue;
+                }
+
+                result.add(
+                        new CompletionProposal(
+                                proposal,
+                                context.prefixOffset,
+                                context.prefix.length(),
+                                proposal.length(),
+                                null,
+                                proposal,
+                                null,
+                                "JSF EL member of "
+                                        + type.getFullyQualifiedName()));
+            }
+
+            return result;
+
+        } catch (JavaModelException e) {
+            return Collections.emptyList();
+        }
     }
 
     private static void completeEl(
@@ -232,33 +405,6 @@ public final class ElCompletionHandler
             return;
         }
 
-        /*
-         * Prefer Eclipse/WTP's own content-assist UI. Our
-         * JsfMarkupContentAssistProcessor participates in that proposal list,
-         * so Ctrl+Alt+Space now behaves like normal Eclipse completion:
-         * popup anchored at the caret, type-to-filter, Enter/Tab selection,
-         * and coexistence with WTP's built-in proposals.
-         */
-        ITextOperationTarget operation =
-                (ITextOperationTarget)
-                        editor.getAdapter(
-                                ITextOperationTarget.class);
-
-        if (operation != null
-                && operation.canDoOperation(
-                        ISourceViewer.CONTENTASSIST_PROPOSALS)) {
-
-            operation.doOperation(
-                    ISourceViewer.CONTENTASSIST_PROPOSALS);
-
-            return;
-        }
-
-        /*
-         * Older/custom WTP editor configurations can theoretically omit the
-         * content-assistant operation. Keep the previous chooser as a safe
-         * fallback instead of making completion disappear.
-         */
         IFile file =
                 EditorContext.currentFile();
 

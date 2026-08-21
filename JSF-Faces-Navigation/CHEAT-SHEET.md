@@ -2051,3 +2051,51 @@ attribute insertion still places caret inside =""
 
 The previous chooser remains a fallback only when the editor does not expose
 native content assist.
+
+---
+
+## 1.14.1 Native WTP popup for EL + XHTML
+
+The old modal:
+
+```text
+JSF EL Completion
+Select a bean property or method:
+```
+
+is no longer the normal path.
+
+At:
+
+```xhtml
+#{bean.|
+```
+
+or while completing JSF/PrimeFaces/RichFaces tags/attributes, use:
+
+```text
+Ctrl+Alt+Space
+```
+
+or normal Eclipse:
+
+```text
+Ctrl+Space
+```
+
+The plug-in now contributes both EL and markup proposals through WTP's modern
+Structured Text Editor completion-proposal framework, on the normal default
+proposal page.
+
+So the proposals appear in the same caret-anchored popup Eclipse uses for
+ordinary content assist.
+
+The legacy chooser is retained only as a fallback for editor configurations
+without a standard content-assist operation.
+
+
+---
+
+## 1.14.2 JAXB hyperlink detector fix
+
+If 1.14.0/1.14.1 showed `failed to load the hyperlink detector` while a Java file still opened normally, the cause was a private constructor on the JAXB/XSD detector extension. 1.14.2 makes that constructor public so Eclipse can instantiate it normally.

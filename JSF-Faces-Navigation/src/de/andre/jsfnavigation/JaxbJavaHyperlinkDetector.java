@@ -28,7 +28,7 @@ public final class JaxbJavaHyperlinkDetector
                     "\\bnamespace\\s*=\\s*(['\"])(.*?)\\1",
                     Pattern.DOTALL);
 
-    private JaxbJavaHyperlinkDetector() {
+    public JaxbJavaHyperlinkDetector() {
     }
 
     @Override

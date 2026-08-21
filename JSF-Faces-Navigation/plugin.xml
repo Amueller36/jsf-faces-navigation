@@ -62,25 +62,35 @@
       </hyperlinkDetector>
    </extension>
 
-
-
    <extension
-         point="org.eclipse.wst.sse.ui.editorConfiguration">
-      <provisionalConfiguration
-            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
-            target="org.eclipse.wst.xml.XML_DEFAULT"
-            type="contentassistprocessor">
-      </provisionalConfiguration>
-      <provisionalConfiguration
-            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
-            target="org.eclipse.wst.html.HTML_DEFAULT"
-            type="contentassistprocessor">
-      </provisionalConfiguration>
-      <provisionalConfiguration
-            class="de.andre.jsfnavigation.JsfMarkupContentAssistProcessor"
-            target="org.eclipse.wst.sse.ST_DEFAULT"
-            type="contentassistprocessor">
-      </provisionalConfiguration>
+         point="org.eclipse.wst.sse.ui.completionProposal">
+      <proposalComputer
+            activate="true"
+            class="de.andre.jsfnavigation.JsfNativeCompletionProposalComputer"
+            id="de.andre.jsfnavigation.proposalComputer.jsfXhtml"
+            name="JSF / XHTML Proposals">
+         <contentType
+               id="org.eclipse.wst.html.core.htmlsource">
+            <partitionType
+                  id="org.eclipse.wst.html.HTML_DEFAULT">
+            </partitionType>
+            <partitionType
+                  id="org.eclipse.wst.xml.XML_DEFAULT">
+            </partitionType>
+            <partitionType
+                  id="org.eclipse.wst.sse.ST_DEFAULT">
+            </partitionType>
+         </contentType>
+         <contentType
+               id="org.eclipse.core.runtime.xml">
+            <partitionType
+                  id="org.eclipse.wst.xml.XML_DEFAULT">
+            </partitionType>
+            <partitionType
+                  id="org.eclipse.wst.sse.ST_DEFAULT">
+            </partitionType>
+         </contentType>
+      </proposalComputer>
    </extension>
 
    <extension

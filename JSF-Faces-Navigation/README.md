@@ -1,4 +1,65 @@
-# JSF EL Navigation 1.14.0
+# JSF EL Navigation 1.14.2
+
+Version 1.14.2 fixes a JAXB/XSD hyperlink-detector instantiation error.
+
+`JaxbJavaHyperlinkDetector` was registered as an Eclipse extension but had a
+private no-argument constructor. Eclipse creates extension classes
+reflectively and therefore could not instantiate the detector when a Java
+editor was opened/activated. Opening a file from Flow Explorer still succeeded
+because file opening and hyperlink-detector initialization are separate editor
+steps. The constructor is now public, as required by the Eclipse registry.
+
+Version 1.14.1 fixes the native XHTML content-assist integration shown
+by the real WTP/Facelets editor.
+
+### Native popup now includes EL proposals too
+
+1.14.0 moved markup/tag/attribute completion toward WTP's content assistant,
+but `Ctrl+Alt+Space` still took the old modal path whenever the caret was inside
+an EL expression such as:
+
+```xhtml
+listener="#{aumiAntragdetail.|}"
+```
+
+That is why the separate `JSF EL Completion` dialog could still appear, while
+Eclipse's own content-assist window showed `No Default Proposals`.
+
+1.14.1 fixes both sides:
+
+- `Ctrl+Alt+Space` delegates to the editor's normal content-assist operation for
+  both JSF EL and XHTML markup.
+- A modern `org.eclipse.wst.sse.ui.completionProposal` proposal computer is
+  registered on WTP's default proposal page for the HTML/XML/default partitions
+  used by the Structured Text Editor.
+- The proposal computer contributes the plug-in's existing bean member
+  resolution (`@Named`/managed beans, aliases, inherited members, local JSF
+  variables) directly as standard Eclipse `ICompletionProposal` entries.
+- The same proposal computer contributes PrimeFaces/RichFaces/JSF
+  tag/attribute proposals.
+- The old modal EL/markup chooser remains only as a fallback if a custom editor
+  does not expose Eclipse's standard content-assist operation.
+
+Expected behavior:
+
+```text
+#{aumiAntragdetail.|
+                     ↓ Ctrl+Alt+Space / Ctrl+Space
+         ┌───────────────────────────────┐
+         │ action                        │
+         │ anlagen                       │
+         │ antrag                        │
+         │ antragId                      │
+         │ ...                           │
+         └───────────────────────────────┘
+```
+
+The proposal window is the normal WTP/Eclipse popup at the caret, rather than a
+separate modal dialog.
+
+This change adds no background search. Bean/member resolution runs only when
+content assist is requested and continues to use the plug-in's existing indexes
+and JDT caches.
 
 Version 1.14.0 adds workspace-aware existing-test targeting and the first
 XSD/JAXB navigation layer.
