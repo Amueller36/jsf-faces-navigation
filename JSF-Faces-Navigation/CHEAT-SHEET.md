@@ -2329,3 +2329,68 @@ aktiviert, enthält der kopierte Text zusätzlich bereits referenzierte Methoden
 und deren erste erkannte Testreferenz.
 
 Der Text ist bewusst Plain Text und eignet sich direkt zum Einfügen in Jira.
+
+---
+
+## 1.15.3 Packages im Jira-Export
+
+`Jira-Übersicht kopieren` schreibt jetzt bei jeder Produktionsklasse das
+vollständige Package dazu:
+
+```text
+[TEILWEISE] PostbuchISP [ISP]
+- Package: de.itzbund.ustv.vr4.postbuch
+```
+
+Auch vorhandene Testklassen enthalten ihr Package:
+
+```text
+- PostbuchISPImplTest [JPA]
+  — Package: de.itzbund.ustv.vr4.postbuch.jpa
+  — VAT-Refund-TestJPA
+```
+
+Damit bleiben gleichnamige Klassen aus unterschiedlichen Packages/Modulen im
+Jira-Text eindeutig zuordenbar.
+
+---
+
+## 1.15.4 Architektur-Gruppierung im Feature Test Audit
+
+Im `Feature Tests…`-Fenster gibt es jetzt:
+
+```text
+Architektur-Reihenfolge:
+Controller → Bean → DSP → ISP
+```
+
+oder:
+
+```text
+ISP → DSP → Bean → Controller
+```
+
+Die Klassen werden als echte Gruppen im Audit-Baum angezeigt.
+
+Innerhalb einer Gruppe kommen zuerst:
+
+```text
+1. Klassen ohne Testklasse
+2. Klassen mit den meisten offenen Methoden
+3. Package / Klassenname
+```
+
+`Jira-Übersicht kopieren` übernimmt die aktuell ausgewählte Richtung und
+gruppiert den Text mit Überschriften:
+
+```text
+=== Controller ===
+=== Bean ===
+=== DSP ===
+=== ISP ===
+```
+
+bzw. umgekehrt.
+
+Die Sortierung/Gruppierung arbeitet nur auf dem vorhandenen Audit-Ergebnis und
+startet keinen neuen Scan.

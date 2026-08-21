@@ -1,4 +1,93 @@
-# JSF EL Navigation 1.15.2
+# JSF EL Navigation 1.15.4
+
+Version 1.15.4 groups Feature Test Audit results by architecture layer
+and lets the developer reverse the direction.
+
+### Architektur-Reihenfolge
+
+The Feature Test Audit now contains:
+
+```text
+Architektur-Reihenfolge:
+[ Controller → Bean → DSP → ISP ▼ ]
+```
+
+with the alternative:
+
+```text
+ISP → DSP → Bean → Controller
+```
+
+The tree is grouped rather than merely globally sorted:
+
+```text
+Controller (3 Klassen, 4/18 Methoden offen)
+    PostbuchController
+    PostbuchDetailController
+    ...
+
+Bean (2 Klassen, 1/11 Methoden offen)
+    PostbuchBean
+    ...
+
+DSP (1 Klasse, 2/5 Methoden offen)
+    PostbuchDSP
+
+ISP (2 Klassen, 3/13 Methoden offen)
+    PostbuchISP
+    ...
+```
+
+Within each architecture group, the most actionable classes are kept first:
+classes without any test class, then classes with more missing methods, then
+package/name order.
+
+The German `Jira-Übersicht kopieren` export follows the exact same selected
+direction and adds section headings such as:
+
+```text
+=== Controller ===
+...
+=== Bean ===
+...
+=== DSP ===
+...
+=== ISP ===
+...
+```
+
+or the reverse order.
+
+The grouping is purely in-memory over the already computed Feature Test Audit
+report and triggers no new JDT/workspace search.
+
+Version 1.15.3 makes the Jira clipboard export unambiguous when the
+workspace contains duplicate simple class names in different packages.
+
+### Packages in the Jira export
+
+Every production class in `Jira-Übersicht kopieren` now includes its package:
+
+```text
+[TEILWEISE] PostbuchISP [ISP]
+- Package: de.itzbund.ustv.vr4.postbuch
+- Methoden: 6/8 referenziert, 2 offen (75 %)
+```
+
+Every listed existing test class also includes its package:
+
+```text
+- Vorhandene Testklassen:
+  - PostbuchISPImplTest [JPA]
+    — Package: de.itzbund.ustv.vr4.postbuch.jpa
+    — VAT-Refund-TestJPA
+```
+
+This is especially useful when the same simple class/test name exists in
+multiple modules or packages.
+
+The change is formatting-only: copying the overview still performs no new
+workspace search or JDT analysis.
 
 Version 1.15.2 adds a German Jira-friendly clipboard export to
 Feature Test Audit.

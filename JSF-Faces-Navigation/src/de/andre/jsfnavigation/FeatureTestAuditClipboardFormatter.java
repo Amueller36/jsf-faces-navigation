@@ -1,6 +1,7 @@
 package de.andre.jsfnavigation;
 
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jdt.core.IMethod;
 import org.eclipse.jdt.core.Signature;
@@ -13,6 +14,18 @@ public final class FeatureTestAuditClipboardFormatter {
     public static String formatGerman(
             FeatureTestAuditReport report,
             boolean includeTestedMethods) {
+
+        return formatGerman(
+                report,
+                includeTestedMethods,
+                FeatureTestAuditOrder
+                        .CONTROLLER_TO_ISP);
+    }
+
+    public static String formatGerman(
+            FeatureTestAuditReport report,
+            boolean includeTestedMethods,
+            int orderMode) {
 
         if (report == null) {
             return "";
@@ -70,6 +83,13 @@ public final class FeatureTestAuditClipboardFormatter {
                 .append(
                         report.getClassesWithoutTests())
                 .append(
+                        "\n")
+                .append(
+                        "- Architektur-Reihenfolge: ")
+                .append(
+                        orderLabel(
+                                orderMode))
+                .append(
                         "\n");
 
         if (report.isTruncated()) {
@@ -85,26 +105,40 @@ public final class FeatureTestAuditClipboardFormatter {
 
         boolean anyClass = false;
 
-        for (FeatureTestClassStatus clazz :
-                report.getClasses()) {
+        Map<String, List<FeatureTestClassStatus>> grouped =
+                FeatureTestAuditOrder
+                        .group(
+                                report,
+                                orderMode,
+                                includeTestedMethods);
 
-            if (clazz == null) {
+        for (Map.Entry<String, List<FeatureTestClassStatus>>
+                entry :
+                    grouped.entrySet()) {
+
+            if (entry.getValue()
+                    .isEmpty()) {
+
                 continue;
             }
 
-            if (!includeTestedMethods
-                    && clazz.getUntestedCount()
-                            == 0) {
+            out.append(
+                    "\n=== ")
+                    .append(
+                            entry.getKey())
+                    .append(
+                            " ===\n");
 
-                continue;
+            for (FeatureTestClassStatus clazz :
+                    entry.getValue()) {
+
+                appendClass(
+                        out,
+                        clazz,
+                        includeTestedMethods);
+
+                anyClass = true;
             }
-
-            appendClass(
-                    out,
-                    clazz,
-                    includeTestedMethods);
-
-            anyClass = true;
         }
 
         if (!anyClass) {
@@ -159,6 +193,14 @@ public final class FeatureTestAuditClipboardFormatter {
                         "]\n");
 
         out.append(
+                "- Package: ")
+                .append(
+                        productionPackage(
+                                clazz))
+                .append(
+                        "\n");
+
+        out.append(
                 "- Methoden: ")
                 .append(
                         clazz.getTestedCount())
@@ -210,7 +252,12 @@ public final class FeatureTestAuditClipboardFormatter {
                                         .classificationLabel(
                                                 test.getClassification()))
                         .append(
-                                "]");
+                                "]")
+                        .append(
+                                " — Package: ")
+                        .append(
+                                testPackage(
+                                        test));
 
                 if (test.getType()
                         .getJavaProject()
@@ -298,6 +345,66 @@ public final class FeatureTestAuditClipboardFormatter {
                         "\n");
             }
         }
+    }
+
+
+
+    private static String orderLabel(
+            int orderMode) {
+
+        return orderMode
+                == FeatureTestAuditOrder
+                        .ISP_TO_CONTROLLER
+                                ? "ISP → DSP → Bean → Controller"
+                                : "Controller → Bean → DSP → ISP";
+    }
+
+    private static String productionPackage(
+            FeatureTestClassStatus clazz) {
+
+        if (clazz == null
+                || clazz.getProductionType()
+                        == null
+                || clazz.getProductionType()
+                        .getPackageFragment()
+                        == null) {
+
+            return "<Default Package>";
+        }
+
+        String packageName =
+                clazz.getProductionType()
+                        .getPackageFragment()
+                        .getElementName();
+
+        return packageName == null
+                || packageName.isEmpty()
+                        ? "<Default Package>"
+                        : packageName;
+    }
+
+    private static String testPackage(
+            TestTargetCandidate test) {
+
+        if (test == null
+                || test.getType()
+                        == null
+                || test.getType()
+                        .getPackageFragment()
+                        == null) {
+
+            return "<Default Package>";
+        }
+
+        String packageName =
+                test.getType()
+                        .getPackageFragment()
+                        .getElementName();
+
+        return packageName == null
+                || packageName.isEmpty()
+                        ? "<Default Package>"
+                        : packageName;
     }
 
     private static String statusLabel(

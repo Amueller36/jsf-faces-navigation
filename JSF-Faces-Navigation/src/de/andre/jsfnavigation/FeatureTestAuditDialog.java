@@ -2,6 +2,7 @@ package de.andre.jsfnavigation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -28,6 +29,7 @@ import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
@@ -41,6 +43,7 @@ public final class FeatureTestAuditDialog
 
     private TreeViewer viewer;
     private Button showTestedButton;
+    private Combo orderCombo;
 
     public FeatureTestAuditDialog(
             Shell parentShell,
@@ -139,7 +142,70 @@ public final class FeatureTestAuditDialog
 
                         viewer.refresh();
                         viewer.expandToLevel(
-                                2);
+                                3);
+                    }
+                });
+
+        Composite orderRow =
+                new Composite(
+                        area,
+                        SWT.NONE);
+
+        GridLayout orderLayout =
+                new GridLayout(
+                        2,
+                        false);
+
+        orderLayout.marginWidth = 0;
+        orderLayout.marginHeight = 0;
+        orderLayout.horizontalSpacing = 8;
+
+        orderRow.setLayout(
+                orderLayout);
+
+        orderRow.setLayoutData(
+                new GridData(
+                        SWT.FILL,
+                        SWT.CENTER,
+                        true,
+                        false));
+
+        new Label(
+                orderRow,
+                SWT.NONE)
+                .setText(
+                        "Architektur-Reihenfolge:");
+
+        orderCombo =
+                new Combo(
+                        orderRow,
+                        SWT.DROP_DOWN
+                        | SWT.READ_ONLY);
+
+        orderCombo.setItems(
+                FeatureTestAuditOrder
+                        .labels());
+
+        orderCombo.select(
+                FeatureTestAuditOrder
+                        .CONTROLLER_TO_ISP);
+
+        orderCombo.setLayoutData(
+                new GridData(
+                        SWT.FILL,
+                        SWT.CENTER,
+                        true,
+                        false));
+
+        orderCombo.addSelectionListener(
+                new SelectionAdapter() {
+                    @Override
+                    public void widgetSelected(
+                            SelectionEvent e) {
+
+                        viewer.refresh();
+                        viewer.expandToLevel(
+                                3);
                     }
                 });
 
@@ -263,7 +329,7 @@ public final class FeatureTestAuditDialog
                 });
 
         viewer.expandToLevel(
-                2);
+                3);
 
         return area;
     }
@@ -684,6 +750,26 @@ public final class FeatureTestAuditDialog
     }
 
 
+
+    private int selectedOrderMode() {
+        if (orderCombo == null
+                || orderCombo.isDisposed()
+                || orderCombo.getSelectionIndex()
+                        < 0) {
+
+            return FeatureTestAuditOrder
+                    .CONTROLLER_TO_ISP;
+        }
+
+        return orderCombo.getSelectionIndex()
+                == FeatureTestAuditOrder
+                        .ISP_TO_CONTROLLER
+                                ? FeatureTestAuditOrder
+                                        .ISP_TO_CONTROLLER
+                                : FeatureTestAuditOrder
+                                        .CONTROLLER_TO_ISP;
+    }
+
     private void copyAuditOverview() {
         String text =
                 FeatureTestAuditClipboardFormatter
@@ -693,7 +779,8 @@ public final class FeatureTestAuditDialog
                                         && !showTestedButton
                                                 .isDisposed()
                                         && showTestedButton
-                                                .getSelection());
+                                                .getSelection(),
+                                selectedOrderMode());
 
         Clipboard clipboard =
                 new Clipboard(
@@ -791,13 +878,45 @@ public final class FeatureTestAuditDialog
         public Object[] getElements(
                 Object inputElement) {
 
-            return report.getClasses()
-                    .toArray();
+            Map<String, List<FeatureTestClassStatus>> grouped =
+                    FeatureTestAuditOrder
+                            .group(
+                                    report,
+                                    selectedOrderMode(),
+                                    true);
+
+            List<FeatureTestAuditGroupNode> nodes =
+                    new ArrayList<FeatureTestAuditGroupNode>();
+
+            for (Map.Entry<String, List<FeatureTestClassStatus>>
+                    entry :
+                        grouped.entrySet()) {
+
+                if (!entry.getValue()
+                        .isEmpty()) {
+
+                    nodes.add(
+                            new FeatureTestAuditGroupNode(
+                                    entry.getKey(),
+                                    entry.getValue()));
+                }
+            }
+
+            return nodes.toArray();
         }
 
         @Override
         public Object[] getChildren(
                 Object parentElement) {
+
+            if (parentElement
+                    instanceof FeatureTestAuditGroupNode) {
+
+                return ((FeatureTestAuditGroupNode)
+                        parentElement)
+                        .getClasses()
+                        .toArray();
+            }
 
             if (parentElement
                     instanceof FeatureTestClassStatus) {
@@ -851,7 +970,40 @@ public final class FeatureTestAuditDialog
             if (element
                     instanceof FeatureTestMethodStatus) {
 
-                return selectedClass();
+                IMethod method =
+                        ((FeatureTestMethodStatus)
+                                element)
+                                .getMethod();
+
+                return method == null
+                        ? null
+                        : classFor(
+                                method.getDeclaringType());
+            }
+
+            if (element
+                    instanceof FeatureTestClassStatus) {
+
+                FeatureTestClassStatus clazz =
+                        (FeatureTestClassStatus)
+                                element;
+
+                Map<String, List<FeatureTestClassStatus>> grouped =
+                        FeatureTestAuditOrder
+                                .group(
+                                        report,
+                                        selectedOrderMode(),
+                                        true);
+
+                List<FeatureTestClassStatus> classes =
+                        grouped.get(
+                                clazz.getArchitectureRole());
+
+                return classes == null
+                        ? null
+                        : new FeatureTestAuditGroupNode(
+                                clazz.getArchitectureRole(),
+                                classes);
             }
 
             return null;
@@ -862,7 +1014,9 @@ public final class FeatureTestAuditDialog
                 Object element) {
 
             return element
-                    instanceof FeatureTestClassStatus;
+                    instanceof FeatureTestAuditGroupNode
+                    || element
+                            instanceof FeatureTestClassStatus;
         }
 
         @Override
@@ -883,6 +1037,14 @@ public final class FeatureTestAuditDialog
         @Override
         public String getText(
                 Object element) {
+
+            if (element
+                    instanceof FeatureTestAuditGroupNode) {
+
+                return ((FeatureTestAuditGroupNode)
+                        element)
+                        .getLabel();
+            }
 
             if (element
                     instanceof FeatureTestClassStatus) {

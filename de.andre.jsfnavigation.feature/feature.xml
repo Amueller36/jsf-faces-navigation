@@ -2,7 +2,7 @@
 <feature
       id="de.andre.jsfnavigation.feature"
       label="JSF EL Navigation"
-      version="1.15.2"
+      version="1.15.4"
       provider-name="Andre">
 
    <description>
@@ -13,7 +13,7 @@
          id="de.andre.jsfnavigation"
          download-size="0"
          install-size="0"
-         version="1.15.2"
+         version="1.15.4"
          unpack="false"/>
 
 </feature>
