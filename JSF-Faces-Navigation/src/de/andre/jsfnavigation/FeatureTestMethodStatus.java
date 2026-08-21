@@ -73,11 +73,17 @@ public final class FeatureTestMethodStatus {
             out.append(
                     "  ← ")
                     .append(
-                            testReferences.size())
-                    .append(
-                            testReferences.size() == 1
-                                    ? " test reference"
-                                    : " test references");
+                            testReferences.get(0));
+
+            if (testReferences.size() > 1) {
+                out.append(
+                        "  (+")
+                        .append(
+                                testReferences.size() - 1)
+                        .append(
+                                " more)");
+            }
+
         } else {
             out.append(
                     "  [NOT REFERENCED BY TEST]");

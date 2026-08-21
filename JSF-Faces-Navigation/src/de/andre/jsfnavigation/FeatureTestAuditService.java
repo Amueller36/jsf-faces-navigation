@@ -45,6 +45,8 @@ public final class FeatureTestAuditService {
     private static final int MAX_PRODUCTION_CLASSES = 250;
     private static final int MAX_METHODS_PER_CLASS = 160;
     private static final int MAX_TEST_COMPILATION_UNITS_PER_CLASS = 16;
+    private static final int MAX_RELATED_SUBTYPES = 64;
+    private static final int MAX_EXTRA_SUBTYPE_TEST_LOOKUPS = 8;
 
     private FeatureTestAuditService() {
     }
@@ -260,9 +262,15 @@ public final class FeatureTestAuditService {
                 productionMethods(
                         production);
 
-        List<TestTargetCandidate> tests =
-                TestTargetFinder.find(
+        RelatedTypeScope relatedTypes =
+                relatedTypeScope(
                         production,
+                        monitor);
+
+        List<TestTargetCandidate> tests =
+                relatedTests(
+                        production,
+                        relatedTypes,
                         monitor);
 
         Map<String, LinkedHashSet<String>>
@@ -279,9 +287,8 @@ public final class FeatureTestAuditService {
         }
 
         Set<String> acceptedDeclaringTypes =
-                declaringTypeNames(
-                        production,
-                        monitor);
+                relatedTypes
+                        .acceptedDeclaringTypes;
 
         int parsedUnits = 0;
 
@@ -328,6 +335,7 @@ public final class FeatureTestAuditService {
             collectReferences(
                     unit,
                     testType,
+                    production.getFullyQualifiedName(),
                     acceptedDeclaringTypes,
                     references,
                     monitor);
@@ -432,6 +440,7 @@ public final class FeatureTestAuditService {
     private static void collectReferences(
             ICompilationUnit unit,
             final IType testType,
+            final String primaryProductionType,
             final Set<String> acceptedDeclaringTypes,
             final Map<String, LinkedHashSet<String>>
                     references,
@@ -567,44 +576,252 @@ public final class FeatureTestAuditService {
                         }
 
                         if (refs != null) {
+                            String declaringName =
+                                    declaring
+                                            .getErasure()
+                                            .getQualifiedName();
+
+                            StringBuilder reference =
+                                    new StringBuilder();
+
+                            reference.append(
+                                    testType.getElementName())
+                                    .append('.')
+                                    .append(
+                                            currentTestMethod)
+                                    .append(
+                                            "(...)");
+
+                            if (primaryProductionType != null
+                                    && !primaryProductionType
+                                            .equals(
+                                                    declaringName)) {
+
+                                reference.append(
+                                        " [via ")
+                                        .append(
+                                                declaring
+                                                        .getErasure()
+                                                        .getName())
+                                        .append(']');
+                            }
+
                             refs.add(
-                                    testType.getElementName()
-                                    + "."
-                                    + currentTestMethod
-                                    + "(...)");
+                                    reference.toString());
                         }
                     }
                 });
     }
 
-    private static Set<String> declaringTypeNames(
+
+    private static RelatedTypeScope relatedTypeScope(
             IType type,
             IProgressMonitor monitor) {
 
-        Set<String> result =
+        Set<String> accepted =
                 new LinkedHashSet<String>();
 
-        result.add(
+        List<IType> subtypes =
+                new ArrayList<IType>();
+
+        accepted.add(
                 type.getFullyQualifiedName());
 
         try {
+            /*
+             * A full hierarchy is intentionally built only during the
+             * on-demand Feature Test Audit. This lets a test that calls an
+             * implementation/subclass count toward the matching base
+             * production method as well.
+             */
             ITypeHierarchy hierarchy =
-                    type.newSupertypeHierarchy(
+                    type.newTypeHierarchy(
                             monitor);
 
             for (IType superType :
                     hierarchy.getAllSupertypes(
                             type)) {
 
-                result.add(
-                        superType.getFullyQualifiedName());
+                accepted.add(
+                        superType
+                                .getFullyQualifiedName());
+            }
+
+            int subtypeCount = 0;
+
+            for (IType subtype :
+                    hierarchy.getAllSubtypes(
+                            type)) {
+
+                if (subtypeCount
+                        >= MAX_RELATED_SUBTYPES) {
+
+                    break;
+                }
+
+                accepted.add(
+                        subtype
+                                .getFullyQualifiedName());
+
+                if (isWorkspaceSourceType(
+                        subtype)) {
+
+                    subtypes.add(
+                            subtype);
+                }
+
+                subtypeCount++;
             }
 
         } catch (JavaModelException e) {
-            // Exact declaring type remains enough for most cases.
+            // Exact production type is still useful if hierarchy creation fails.
         }
 
+        return new RelatedTypeScope(
+                accepted,
+                subtypes);
+    }
+
+    private static List<TestTargetCandidate> relatedTests(
+            IType production,
+            RelatedTypeScope relatedTypes,
+            IProgressMonitor monitor) {
+
+        Map<String, TestTargetCandidate> unique =
+                new LinkedHashMap<String, TestTargetCandidate>();
+
+        addCandidates(
+                unique,
+                TestTargetFinder.find(
+                        production,
+                        monitor));
+
+        /*
+         * `PostbuchISPImplTest` is already found by the `PostbuchISP*` prefix
+         * lookup, so no extra search is needed for the common case.
+         *
+         * Additional subtype searches are only used when an implementation
+         * has a different leading name, e.g. `DefaultPostbuchISPImplTest`.
+         */
+        int extraLookups = 0;
+
+        String productionSimple =
+                production.getElementName();
+
+        for (IType subtype :
+                relatedTypes.subtypes) {
+
+            if (monitor != null
+                    && monitor.isCanceled()) {
+
+                break;
+            }
+
+            if (extraLookups
+                    >= MAX_EXTRA_SUBTYPE_TEST_LOOKUPS) {
+
+                break;
+            }
+
+            if (subtype.getElementName()
+                    .startsWith(
+                            productionSimple)) {
+
+                continue;
+            }
+
+            addCandidates(
+                    unique,
+                    TestTargetFinder.find(
+                            subtype,
+                            monitor));
+
+            extraLookups++;
+        }
+
+        List<TestTargetCandidate> result =
+                new ArrayList<TestTargetCandidate>(
+                        unique.values());
+
+        Collections.sort(
+                result,
+                new Comparator<TestTargetCandidate>() {
+                    @Override
+                    public int compare(
+                            TestTargetCandidate left,
+                            TestTargetCandidate right) {
+
+                        int score =
+                                right.getScore()
+                                        - left.getScore();
+
+                        if (score != 0) {
+                            return score;
+                        }
+
+                        return left.getLabel()
+                                .compareToIgnoreCase(
+                                        right.getLabel());
+                    }
+                });
+
         return result;
+    }
+
+    private static void addCandidates(
+            Map<String, TestTargetCandidate> target,
+            List<TestTargetCandidate> candidates) {
+
+        if (candidates == null) {
+            return;
+        }
+
+        for (TestTargetCandidate candidate :
+                candidates) {
+
+            if (candidate == null
+                    || candidate.getType()
+                            == null) {
+
+                continue;
+            }
+
+            String handle =
+                    candidate.getType()
+                            .getHandleIdentifier();
+
+            TestTargetCandidate existing =
+                    target.get(
+                            handle);
+
+            if (existing == null
+                    || candidate.getScore()
+                            > existing.getScore()) {
+
+                target.put(
+                        handle,
+                        candidate);
+            }
+        }
+    }
+
+    private static boolean isWorkspaceSourceType(
+            IType type) {
+
+        if (type == null
+                || !type.exists()) {
+
+            return false;
+        }
+
+        IResource resource =
+                type.getResource();
+
+        return resource
+                instanceof IFile
+                && resource.exists()
+                && type.getCompilationUnit()
+                        != null;
     }
 
     private static boolean isRelevantProductionType(
@@ -839,4 +1056,23 @@ public final class FeatureTestAuditService {
                 ? type
                 : null;
     }
+
+    private static final class RelatedTypeScope {
+
+        final Set<String> acceptedDeclaringTypes;
+        final List<IType> subtypes;
+
+        RelatedTypeScope(
+                Set<String> acceptedDeclaringTypes,
+                List<IType> subtypes) {
+
+            this.acceptedDeclaringTypes =
+                    acceptedDeclaringTypes;
+
+            this.subtypes =
+                    subtypes;
+        }
+    }
+
+
 }

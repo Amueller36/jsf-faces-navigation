@@ -2237,3 +2237,95 @@ that remained under `Other`.
 ### DSP
 
 `DSP` is now a dedicated Flow architecture category.
+
+---
+
+## 1.15.1 Feature Audit: implementation/subtype tests
+
+Feature Test Audit now treats calls through a production implementation or
+subclass as references to the corresponding audited base method.
+
+Example:
+
+```text
+PostbuchISP
+    ↑
+PostbuchISPImpl
+    ↑
+PostbuchISPImplTest
+```
+
+If the test calls:
+
+```java
+postbuchISPImpl.loadPostbuch(id);
+```
+
+the matching `PostbuchISP.loadPostbuch(...)` entry can be marked referenced.
+
+With tested methods visible, the source is shown:
+
+```text
+✓ loadPostbuch(Long)
+  ← PostbuchISPImplTest.shouldLoadPostbuch(...) [via PostbuchISPImpl]
+```
+
+The audit considers:
+
+```text
+production type
+supertypes/interfaces
+subtypes/implementations
+```
+
+Extra performance guards:
+
+```text
+max related subtypes:                64
+max extra subtype test-name lookups:  8
+```
+
+The common `PostbuchISPImplTest` naming pattern is already found by the normal
+`PostbuchISP*` indexed test lookup and does not require an extra search.
+
+---
+
+## 1.15.2 Jira-Übersicht aus Feature Test Audit
+
+Im `Feature Tests…`-Fenster:
+
+```text
+Jira-Übersicht kopieren
+```
+
+kopiert eine deutsche Textübersicht mit:
+
+```text
+Feature
+Gesamtzahl relevanter Klassen
+testbare Methoden
+bereits referenzierte Methoden
+offene Methoden
+statische Methoden-Referenzabdeckung
+Klassen ohne Testklasse
+
+pro Klasse:
+Status
+Architekturrolle
+Methodenzahlen
+vorhandene Testklassen
+offene Methoden
+```
+
+Standardmäßig liegt der Fokus auf offenen Punkten.
+
+Ist:
+
+```text
+Show already referenced/tested methods
+```
+
+aktiviert, enthält der kopierte Text zusätzlich bereits referenzierte Methoden
+und deren erste erkannte Testreferenz.
+
+Der Text ist bewusst Plain Text und eignet sich direkt zum Einfügen in Jira.

@@ -19,6 +19,9 @@ import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Point;
@@ -177,7 +180,7 @@ public final class FeatureTestAuditDialog
 
         GridLayout actionLayout =
                 new GridLayout(
-                        5,
+                        6,
                         true);
 
         actionLayout.marginWidth = 0;
@@ -245,6 +248,17 @@ public final class FeatureTestAuditDialog
                     public void run() {
 
                         addToFlow();
+                    }
+                });
+
+        actionButton(
+                actions,
+                "Jira-Übersicht kopieren",
+                new Runnable() {
+                    @Override
+                    public void run() {
+
+                        copyAuditOverview();
                     }
                 });
 
@@ -667,6 +681,43 @@ public final class FeatureTestAuditDialog
 
         create.setUser(true);
         create.schedule();
+    }
+
+
+    private void copyAuditOverview() {
+        String text =
+                FeatureTestAuditClipboardFormatter
+                        .formatGerman(
+                                report,
+                                showTestedButton != null
+                                        && !showTestedButton
+                                                .isDisposed()
+                                        && showTestedButton
+                                                .getSelection());
+
+        Clipboard clipboard =
+                new Clipboard(
+                        getShell()
+                                .getDisplay());
+
+        try {
+            clipboard.setContents(
+                    new Object[] {
+                            text
+                    },
+                    new Transfer[] {
+                            TextTransfer
+                                    .getInstance()
+                    });
+
+        } finally {
+            clipboard.dispose();
+        }
+
+        WebSphereStatusLine.show(
+                "Deutsche Feature-Testübersicht für "
+                        + report.getFeature()
+                        + " in die Zwischenablage kopiert.");
     }
 
     private void addToFlow() {

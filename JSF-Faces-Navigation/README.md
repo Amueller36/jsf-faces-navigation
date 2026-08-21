@@ -1,4 +1,129 @@
-# JSF EL Navigation 1.15.0
+# JSF EL Navigation 1.15.2
+
+Version 1.15.2 adds a German Jira-friendly clipboard export to
+Feature Test Audit.
+
+### Jira-Übersicht kopieren
+
+The Feature Test Audit dialog now contains:
+
+```text
+Jira-Übersicht kopieren
+```
+
+It copies a plain-text German overview that can be pasted directly into a Jira
+ticket, Teams message, review comment, etc.
+
+Example:
+
+```text
+Feature-Testübersicht: Postbuch
+
+Zusammenfassung
+- Relevante Produktionsklassen: 7
+- Testbare Methoden: 42
+- Bereits durch Testcode referenziert: 31
+- Noch nicht durch Testcode referenziert: 11
+- Statische Methoden-Referenzabdeckung: 74 %
+- Klassen ohne gefundene Testklasse: 2
+
+Hinweis: Die Abdeckung basiert auf statisch aufgelösten Methodenaufrufen im
+Testcode und ist keine JaCoCo-Laufzeit-Coverage.
+
+[KEINE TESTKLASSE] PostbuchDSP [DSP]
+- Methoden: 0/5 referenziert, 5 offen (0 %)
+- Vorhandene Testklassen: keine
+- Noch nicht durch Testcode referenzierte Methoden:
+  - speichern(...)
+  - laden(...)
+
+[TEILWEISE] PostbuchISP [ISP]
+- Methoden: 6/8 referenziert, 2 offen (75 %)
+- Vorhandene Testklassen:
+  - PostbuchISPImplTest [JPA] — VAT-Refund-TestJPA
+- Noch nicht durch Testcode referenzierte Methoden:
+  - löschen(...)
+  - neuBerechnen(...)
+```
+
+By default the clipboard export mirrors the audit's focus and omits fully
+covered classes / already referenced methods.
+
+If `Show already referenced/tested methods` is enabled before copying, the
+clipboard export also includes the tested methods and the first concrete test
+reference, including `[via ImplementationType]` information when relevant.
+
+Clipboard generation is purely in-memory and adds no extra workspace/JDT
+search.
+
+Version 1.15.1 extends Feature Test Audit across production
+implementations/subtypes.
+
+### Implementation/subtype tests count toward the audited production method
+
+A common project layout is:
+
+```text
+PostbuchISP.java
+PostbuchISPImpl.java
+PostbuchISPImplTest.java
+```
+
+The existing-test finder already recognizes `PostbuchISPImplTest` as a
+candidate for `PostbuchISP` because of the shared name prefix. 1.15.1 now also
+maps the method calls inside that test correctly when JDT resolves them against
+`PostbuchISPImpl` rather than `PostbuchISP`.
+
+During the on-demand Feature Test Audit, the plug-in builds the JDT type
+hierarchy for the production class and accepts method bindings declared on:
+
+```text
+the audited production type
+its supertypes/interfaces
+its implementations/subclasses
+```
+
+A call such as:
+
+```java
+postbuchISPImpl.loadPostbuch(id);
+```
+
+inside `PostbuchISPImplTest` can therefore satisfy the matching
+`PostbuchISP.loadPostbuch(...)` audit entry when the signature matches.
+
+When already-tested methods are shown, the audit makes this visible:
+
+```text
+✓ loadPostbuch(Long)
+  ← PostbuchISPImplTest.shouldLoadPostbuch(...) [via PostbuchISPImpl]
+```
+
+### Test discovery for differently named implementations
+
+The common case (`PostbuchISPImplTest`) needs no extra workspace search because
+the normal `PostbuchISP*` indexed lookup already finds it.
+
+For differently prefixed implementations such as:
+
+```text
+DefaultPostbuchISPImpl
+DefaultPostbuchISPImplTest
+```
+
+Feature Test Audit performs a small bounded extra test lookup for workspace
+subtypes.
+
+Performance bounds added for this extension:
+
+```text
+related subtypes accepted in hierarchy: 64
+extra subtype-specific test lookups:      8
+```
+
+These checks only run inside the explicitly requested Feature Test Audit. No
+new hierarchy work is added to normal typing, editor navigation, Flow refreshes,
+or ordinary `Auto tests` discovery.
 
 Version 1.15.0 adds an on-demand **Feature Test Audit** for exactly the
 workflow where a feature spans many Controller/Bean/ISP/DSP classes and the
